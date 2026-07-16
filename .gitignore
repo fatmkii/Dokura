@@ -1,1 +1,25 @@
 content/
+
+# Server
+server/.venv/
+server/.pytest_cache/
+server/**/__pycache__/
+server/*.egg-info/
+
+# Web
+web/node_modules/
+web/dist/
+web/test-results/
+web/playwright-report/
+
+# Android / Gradle
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+
+# Persistent runtime data (directory placeholders remain tracked)
+MetaData/*
+!MetaData/.gitkeep
+Config/*
+!Config/.gitkeep

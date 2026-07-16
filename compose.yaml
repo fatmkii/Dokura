@@ -1,0 +1,26 @@
+services:
+  dokura:
+    build:
+      context: .
+    image: dokura:stage-00
+    environment:
+      DOKURA_CONTENT_DIR: /data/content
+      DOKURA_METADATA_DIR: /data/metadata
+      DOKURA_CONFIG_DIR: /data/config
+    ports:
+      - "${DOKURA_PORT:-8000}:8000"
+    volumes:
+      - ./content:/data/content:ro
+      - ./MetaData:/data/metadata
+      - ./Config:/data/config
+    healthcheck:
+      test:
+        - CMD
+        - .venv/bin/python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health', timeout=2)"
+      interval: 5s
+      timeout: 3s
+      retries: 6
+      start_period: 2s
+    restart: unless-stopped

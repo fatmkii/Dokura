@@ -1,0 +1,17 @@
+.git
+.gitignore
+android
+Config
+content
+docs
+MetaData
+scripts
+server/.pytest_cache
+server/.venv
+server/**/__pycache__
+server/openapi
+server/tests
+web/dist
+web/node_modules
+web/playwright-report
+web/test-results

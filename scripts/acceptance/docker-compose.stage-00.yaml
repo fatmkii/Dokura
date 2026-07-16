@@ -1,0 +1,6 @@
+services:
+  dokura:
+    volumes:
+      - ${DOKURA_ACCEPTANCE_CONTENT:?}:/data/content:ro
+      - ${DOKURA_ACCEPTANCE_METADATA:?}:/data/metadata
+      - ${DOKURA_ACCEPTANCE_CONFIG:?}:/data/config

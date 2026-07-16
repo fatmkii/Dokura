@@ -1,0 +1,16 @@
+export const zhCN = {
+  brand: "Dokura",
+  eyebrow: "本地内容库",
+  heading: "你的收藏，安静地待在自己的网络里。",
+  body: "工程骨架已就绪。完成首次扫描后，目录和阅读入口将在这里出现。",
+  server: "服务端",
+  serverReady: "等待连接",
+  api: "API 契约",
+  apiVersion: "v1 已冻结",
+  content: "内容目录",
+  contentPending: "尚未扫描",
+  baseStatus: "基础状态",
+  stageZero: "阶段 0",
+  settings: "打开设置",
+  footer: "局域网优先 · 数据留在你的设备中",
+} as const;

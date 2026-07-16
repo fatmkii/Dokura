@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Dokura</string>
+    <string name="welcome_eyebrow">本地内容库</string>
+    <string name="welcome_title">连接你的 Dokura 服务</string>
+    <string name="welcome_body">工程骨架已就绪。连接设置将在后续阶段开放。</string>
+    <string name="stage_label">阶段 0 · API v1</string>
+</resources>
