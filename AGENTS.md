@@ -17,7 +17,7 @@ Build Tools：36.0.0
 Command-line Tools：20.0
 ```
 
-### Windows Android 虚拟机
+## Windows Android 虚拟机
 
 Android 虚拟机运行在 Windows 宿主机上。WSL 中应调用 Windows 版 `adb.exe`：
 
@@ -25,4 +25,9 @@ Android 虚拟机运行在 Windows 宿主机上。WSL 中应调用 Windows 版 `
 /mnt/c/Users/47155/AppData/Local/Android/Sdk/platform-tools/adb.exe
 ```
 
-模拟器设备为 `emulator-5554`。常用命令：
+模拟器设备为 `emulator-5554`。
+
+
+## 验证用的内容
+
+./Content文件夹中准备了约200个zip文档，项目验证时可以使用。但主要只读，不要变更或删除。
