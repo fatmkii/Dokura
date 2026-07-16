@@ -11,6 +11,8 @@ from dokura.constants import API_VERSION, APP_NAME, APP_VERSION, OPENAPI_VERSION
 from dokura.errors import install_error_handlers
 from dokura.i18n.zh_cn import OPENAPI_TAGS
 from dokura.logging import configure_logging
+from dokura.metadata.database import WriteScheduler, create_database_engine
+from dokura.metadata.migrations import upgrade_database
 from dokura.sqlite_check import SQLiteCapabilities, verify_sqlite_capabilities
 
 
@@ -30,9 +32,16 @@ def create_app(
         configure_logging()
         capabilities = sqlite_check()
         runtime_settings.prepare()
+        upgrade_database(runtime_settings.database_path)
+        engine = create_database_engine(runtime_settings.database_path)
         app.state.sqlite = capabilities
         app.state.settings = runtime_settings
-        yield
+        app.state.database_engine = engine
+        app.state.writer = WriteScheduler(engine)
+        try:
+            yield
+        finally:
+            engine.dispose()
 
     app = FastAPI(
         title=APP_NAME,

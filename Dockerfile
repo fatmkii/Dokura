@@ -36,6 +36,8 @@ COPY server/pyproject.toml server/uv.lock ./
 RUN uv sync --locked --no-dev \
     && .venv/bin/python -c "import sqlite3; assert sqlite3.sqlite_version_info >= (3, 51, 3), sqlite3.sqlite_version" \
     && .venv/bin/python -c "import sqlite3; c=sqlite3.connect(':memory:'); c.execute(\"CREATE VIRTUAL TABLE probe USING fts5(value, tokenize='trigram')\")"
+COPY server/alembic.ini ./alembic.ini
+COPY server/alembic ./alembic
 COPY server/dokura ./dokura
 COPY --from=web-build /build/web/dist /app/web/dist
 

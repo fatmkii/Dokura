@@ -9,6 +9,14 @@ class Settings:
     metadata_dir: Path
     config_dir: Path
 
+    @property
+    def database_path(self) -> Path:
+        return self.metadata_dir / "dokura.sqlite3"
+
+    @property
+    def cover_dir(self) -> Path:
+        return self.metadata_dir / "covers"
+
     @classmethod
     def from_env(cls) -> "Settings":
         return cls(
