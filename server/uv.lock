@@ -77,6 +77,7 @@ dependencies = [
     { name = "pillow" },
     { name = "sqlalchemy" },
     { name = "uvicorn", extra = ["standard"] },
+    { name = "watchfiles" },
 ]
 
 [package.dev-dependencies]
@@ -92,6 +93,7 @@ requires-dist = [
     { name = "pillow", specifier = ">=12.1,<12.2" },
     { name = "sqlalchemy", specifier = ">=2.0,<2.1" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.40,<0.41" },
+    { name = "watchfiles", specifier = ">=1.1,<2" },
 ]
 
 [package.metadata.requires-dev]

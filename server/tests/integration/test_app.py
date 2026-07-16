@@ -1,4 +1,5 @@
 from fastapi.testclient import TestClient
+from time import monotonic, sleep
 
 from dokura.main import create_app
 from dokura.sqlite_check import SQLiteCapabilities
@@ -49,3 +50,46 @@ def test_startup_creates_writable_runtime_directories(settings) -> None:
         pass
     assert settings.metadata_dir.is_dir()
     assert settings.config_dir.is_dir()
+
+
+def test_content_can_be_temporarily_unavailable_at_startup(settings) -> None:
+    settings.content_dir.rmdir()
+    with TestClient(create_app(settings=settings, sqlite_check=passing_sqlite_check)) as client:
+        assert client.get("/api/v1/health").status_code == 200
+        deadline = monotonic() + 2
+        while monotonic() < deadline:
+            status = client.get("/api/v1/admin/scan").json()
+            if status["status"] == "failed":
+                break
+            sleep(0.01)
+        assert status["status"] == "failed"
+
+
+def test_stage2_management_endpoints_and_listener(settings) -> None:
+    with TestClient(create_app(settings=settings, sqlite_check=passing_sqlite_check)) as client:
+        deadline = monotonic() + 3
+        while monotonic() < deadline:
+            if client.get("/api/v1/admin/scan").json()["status"] in ("completed", "partial"):
+                break
+            sleep(0.01)
+
+        (settings.content_dir / "listener.zip").write_bytes(b"still being written")
+        deadline = monotonic() + 4
+        waiting = 0
+        while monotonic() < deadline:
+            payload = client.get("/api/v1/admin/tasks").json()
+            waiting = payload["waiting_count"]
+            if waiting == 1:
+                break
+            sleep(0.05)
+        assert waiting == 1
+
+        response = client.post("/api/v1/admin/scan")
+        assert response.status_code == 202
+        preview = client.post("/api/v1/admin/cache-cleanup/preview")
+        assert preview.status_code == 200
+        confirmation_id = preview.json()["confirmation_id"]
+        assert client.post(
+            "/api/v1/admin/cache-cleanup/execute",
+            json={"confirmation_id": confirmation_id},
+        ).status_code == 200

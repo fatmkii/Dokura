@@ -1,8 +1,12 @@
+import asyncio
 from collections.abc import Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -12,11 +16,20 @@ from dokura.errors import install_error_handlers
 from dokura.i18n.zh_cn import OPENAPI_TAGS
 from dokura.logging import configure_logging
 from dokura.metadata.database import WriteScheduler, create_database_engine
+from dokura.metadata.cache_cleanup import CacheCleanupManager
 from dokura.metadata.migrations import upgrade_database
+from dokura.metadata.models import Task
+from dokura.metadata.scanning import ScanCoordinator
+from dokura.metadata.tasks import ForegroundPressure, TaskScheduler
+from dokura.metadata.watcher import watch_content
 from dokura.sqlite_check import SQLiteCapabilities, verify_sqlite_capabilities
 
 
 SQLiteCheck = Callable[[], SQLiteCapabilities]
+
+
+class CleanupExecution(BaseModel):
+    confirmation_id: str
 
 
 def create_app(
@@ -37,10 +50,33 @@ def create_app(
         app.state.sqlite = capabilities
         app.state.settings = runtime_settings
         app.state.database_engine = engine
-        app.state.writer = WriteScheduler(engine)
+        writer = WriteScheduler(engine)
+        pressure = ForegroundPressure()
+        task_scheduler = TaskScheduler(
+            engine, writer, runtime_settings.content_dir, runtime_settings.cover_dir, pressure
+        )
+        scans = ScanCoordinator(engine, writer, runtime_settings.content_dir, task_scheduler, pressure)
+        cache_cleanup = CacheCleanupManager(
+            engine, writer, runtime_settings.metadata_dir, runtime_settings.content_dir
+        )
+        app.state.writer = writer
+        app.state.foreground_pressure = pressure
+        app.state.task_scheduler = task_scheduler
+        app.state.scans = scans
+        app.state.cache_cleanup = cache_cleanup
+        workers = [
+            asyncio.create_task(task_scheduler.run(), name="dokura-task-scheduler"),
+            asyncio.create_task(scans.run(), name="dokura-scan-coordinator"),
+            asyncio.create_task(watch_content(runtime_settings.content_dir, scans), name="dokura-content-watcher"),
+        ]
         try:
             yield
         finally:
+            await scans.stop()
+            await task_scheduler.stop()
+            for worker in workers:
+                worker.cancel()
+            await asyncio.gather(*workers, return_exceptions=True)
             engine.dispose()
 
     app = FastAPI(
@@ -62,6 +98,64 @@ def create_app(
             "server_version": APP_VERSION,
             "api_version": API_VERSION,
         }
+
+    @app.get("/api/v1/admin/scan", tags=[OPENAPI_TAGS["background"]])
+    async def scan_status() -> dict[str, object]:
+        return await asyncio.to_thread(app.state.scans.latest_status)
+
+    @app.post("/api/v1/admin/scan", status_code=202, tags=[OPENAPI_TAGS["background"]])
+    async def request_scan() -> dict[str, bool]:
+        return {"accepted": app.state.scans.request_scan()}
+
+    @app.get("/api/v1/admin/tasks", tags=[OPENAPI_TAGS["background"]])
+    async def task_status() -> dict[str, object]:
+        def read_tasks() -> dict[str, object]:
+            with Session(app.state.database_engine) as session:
+                tasks = session.scalars(
+                    select(Task).order_by(Task.updated_at.desc()).limit(100)
+                ).all()
+                waiting = session.scalar(select(func.count()).select_from(Task).where(
+                    Task.status.in_(("waiting_stable", "retry_wait"))
+                ))
+                return {
+                    "waiting_count": waiting or 0,
+                    "items": [
+                        {
+                            "id": task.id,
+                            "file_id": task.file_id,
+                            "relative_path": task.relative_path,
+                            "type": task.task_type,
+                            "status": task.status,
+                            "priority": task.priority,
+                            "retry_count": task.retry_count,
+                            "max_retries": 3,
+                            "next_run_at": task.next_run_at,
+                            "last_error": task.last_error,
+                            "created_at": task.created_at,
+                            "started_at": task.started_at,
+                            "updated_at": task.updated_at,
+                        }
+                        for task in tasks
+                    ],
+                }
+        return await asyncio.to_thread(read_tasks)
+
+    @app.post("/api/v1/admin/cache-cleanup/preview", tags=[OPENAPI_TAGS["cache"]])
+    async def cleanup_preview() -> dict[str, object]:
+        preview = await asyncio.to_thread(app.state.cache_cleanup.preview)
+        return {
+            "confirmation_id": preview.confirmation_id,
+            "file_count": preview.file_count,
+            "cache_file_count": preview.cache_file_count,
+            "estimated_bytes": preview.estimated_bytes,
+        }
+
+    @app.post("/api/v1/admin/cache-cleanup/execute", tags=[OPENAPI_TAGS["cache"]])
+    async def cleanup_execute(request: CleanupExecution) -> dict[str, int]:
+        try:
+            return await asyncio.to_thread(app.state.cache_cleanup.execute, request.confirmation_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     static_dir = web_dist or Path(__file__).resolve().parents[2] / "web" / "dist"
     if static_dir.is_dir():

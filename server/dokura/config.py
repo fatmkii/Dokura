@@ -26,8 +26,6 @@ class Settings:
         )
 
     def prepare(self) -> None:
-        if not self.content_dir.is_dir():
-            raise RuntimeError(f"Content 目录不存在或不可访问: {self.content_dir}")
         for label, path in (("MetaData", self.metadata_dir), ("Config", self.config_dir)):
             try:
                 path.mkdir(parents=True, exist_ok=True)

@@ -6,6 +6,7 @@ import posixpath
 import struct
 import zipfile
 import zlib
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -190,7 +191,7 @@ def _make_cover(image: Image.Image) -> bytes:
     return destination.getvalue()
 
 
-def analyze_zip(path: Path) -> ZipAnalysis:
+def analyze_zip(path: Path, yield_check: Callable[[], None] | None = None) -> ZipAnalysis:
     try:
         with zipfile.ZipFile(path) as archive:
             candidates = inspect_archive(archive)
@@ -198,10 +199,17 @@ def analyze_zip(path: Path) -> ZipAnalysis:
                 ArchivePage(number=index, entry_name=info.filename, uncompressed_size=info.file_size, crc32=info.CRC)
                 for index, (info, _normalized) in enumerate(candidates, start=1)
             )
+        if yield_check is not None:
+            yield_check()
+        with zipfile.ZipFile(path) as archive:
             unavailable: dict[int, str] = {}
             for page, (info, _normalized) in zip(pages, candidates, strict=True):
                 try:
-                    image = _validated_image(_read_entry(archive, info))
+                    try:
+                        current_info = archive.getinfo(info.filename)
+                    except KeyError as exc:
+                        raise TemporaryReadError("ZIP 内容可能已变化") from exc
+                    image = _validated_image(_read_entry(archive, current_info))
                     return ZipAnalysis(pages, page.number, _make_cover(image), unavailable)
                 except DeterministicPageError as exc:
                     unavailable[page.number] = exc.code

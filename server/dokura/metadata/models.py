@@ -37,7 +37,7 @@ class File(Base):
     __tablename__ = "files"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    relative_path: Mapped[str] = mapped_column(Text, unique=True)
+    relative_path: Mapped[str] = mapped_column(Text)
     original_filename: Mapped[str] = mapped_column(Text)
     filename_nfc: Mapped[str] = mapped_column(Text)
     filename_casefold: Mapped[str] = mapped_column(Text, index=True)
@@ -62,13 +62,21 @@ class File(Base):
     parse_warnings_json: Mapped[str] = mapped_column(Text, default="[]")
     unclassified_tags_json: Mapped[str] = mapped_column(Text, default="[]")
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    rating: Mapped[int] = mapped_column(Integer, default=0)
+    present: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    storage_unavailable: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_seen_scan_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now, onupdate=utc_now)
 
     pages: Mapped[list[Page]] = relationship(cascade="all, delete-orphan", back_populates="file")
     tags: Mapped[list[FileTag]] = relationship(cascade="all, delete-orphan", back_populates="file")
 
-    __table_args__ = (Index("ix_files_identity", "device", "inode", "size"),)
+    __table_args__ = (
+        Index("ix_files_identity", "device", "inode", "size"),
+        Index("ix_files_visible_path", "present", "relative_path"),
+    )
 
 
 class Page(Base):
@@ -109,11 +117,18 @@ class Task(Base):
     __tablename__ = "tasks"
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     file_id: Mapped[str | None] = mapped_column(ForeignKey("files.id", ondelete="CASCADE"), nullable=True)
+    relative_path: Mapped[str | None] = mapped_column(Text, nullable=True, index=True)
     task_type: Mapped[str] = mapped_column(String(32), index=True)
     status: Mapped[str] = mapped_column(String(32), index=True)
     priority: Mapped[int] = mapped_column(Integer)
     retry_count: Mapped[int] = mapped_column(Integer, default=0)
     next_run_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    stable_size: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    stable_modified_ns: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    stable_count: Mapped[int] = mapped_column(Integer, default=0)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
 

@@ -6,4 +6,6 @@ MESSAGES = {
 
 OPENAPI_TAGS = {
     "health_identity": "健康与身份",
+    "background": "扫描与后台任务",
+    "cache": "缓存管理",
 }

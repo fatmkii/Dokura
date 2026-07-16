@@ -3,6 +3,8 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import stat
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -19,8 +21,10 @@ class FileSnapshot:
 
     @classmethod
     def read(cls, path: Path) -> "FileSnapshot":
-        stat = path.stat()
-        return cls(stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns)
+        info = path.stat(follow_symlinks=False)
+        if not stat.S_ISREG(info.st_mode):
+            raise OSError("目标不是普通文件")
+        return cls(info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns)
 
     @property
     def content_version(self) -> str:
@@ -40,11 +44,13 @@ class FileChangedDuringAnalysis(Exception):
     pass
 
 
-def prepare_analysis(zip_path: Path, cover_dir: Path) -> PreparedAnalysis:
+def prepare_analysis(
+    zip_path: Path, cover_dir: Path, yield_check: Callable[[], None] | None = None,
+) -> PreparedAnalysis:
     """Perform all ZIP/image/filesystem I/O before a database transaction is opened."""
     before = FileSnapshot.read(zip_path)
     parsed = parse_filename(zip_path.name)
-    archive = analyze_zip(zip_path)
+    archive = analyze_zip(zip_path) if yield_check is None else analyze_zip(zip_path, yield_check)
     temporary: Path | None = None
     if archive.cover_jpeg is not None:
         temporary_dir = cover_dir / "tmp"

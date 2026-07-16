@@ -9,6 +9,7 @@ dependencies = [
     "pillow>=12.1,<12.2",
     "sqlalchemy>=2.0,<2.1",
     "uvicorn[standard]>=0.40,<0.41",
+    "watchfiles>=1.1,<2",
 ]
 
 [dependency-groups]
