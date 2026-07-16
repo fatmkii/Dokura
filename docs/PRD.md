@@ -36,5 +36,5 @@
 
 
 # 技术栈共通约束
- - 首版开发基线为Python 3.14.x、FastAPI 0.138.x、Vue 3.5.x、Naive UI 2.44.x、Flutter 3.44.x stable、Node.js 22.x LTS、TypeScript 5.9.x和Vite 7.x；Dart使用Flutter 3.44.x附带的版本。
+ - 首版开发基线为Python 3.14.x、FastAPI 0.138.x、Vue 3.5.x、Naive UI 2.44.x、Flutter 3.44.x stable、Node.js 24.x LTS、TypeScript 5.9.x和Vite 7.x；Dart使用Flutter 3.44.x附带的版本。
  - PRD记录兼容的版本系列，实际构建使用的精确版本由锁文件记录：Python依赖使用`uv.lock`，Web依赖使用包管理器锁文件，Flutter依赖使用`pubspec.lock`。Docker基础镜像固定到补丁版本和镜像摘要。开发期间可在同一minor系列内升级patch版本；minor或major升级必须单独完成兼容性验证。
