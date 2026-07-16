@@ -12,13 +12,14 @@ from dokura.i18n.zh_cn import MESSAGES
 logger = logging.getLogger(__name__)
 
 
-def error_response(status_code: int, code: str, message: str, request_id: str) -> JSONResponse:
+def error_response(status_code: int, code: str, message: str, request_id: str, headers: dict[str, str] | None = None) -> JSONResponse:
+    response_headers = {"X-Request-ID": request_id, **(headers or {})}
     return JSONResponse(
         status_code=status_code,
         content={
             "error": {"code": code, "message": message, "request_id": request_id}
         },
-        headers={"X-Request-ID": request_id},
+        headers=response_headers,
     )
 
 
@@ -35,7 +36,7 @@ def install_error_handlers(app: FastAPI) -> None:
     async def http_error(request: Request, exc: HTTPException) -> JSONResponse:
         code = "not_found" if exc.status_code == 404 else "http_error"
         message = MESSAGES.get(code, str(exc.detail))
-        return error_response(exc.status_code, code, message, request.state.request_id)
+        return error_response(exc.status_code, code, message, request.state.request_id, exc.headers)
 
     @app.exception_handler(RequestValidationError)
     async def validation_error(

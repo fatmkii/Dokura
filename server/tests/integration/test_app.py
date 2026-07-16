@@ -9,6 +9,11 @@ def passing_sqlite_check() -> SQLiteCapabilities:
     return SQLiteCapabilities(version="3.51.3", fts5_trigram=True)
 
 
+def login(client: TestClient) -> None:
+    response = client.post("/api/v1/auth/login", json={"username": "admin", "password": "admin"})
+    assert response.status_code == 200
+
+
 def test_health_is_available_without_scan(settings) -> None:
     with TestClient(create_app(settings=settings, sqlite_check=passing_sqlite_check)) as client:
         response = client.get("/api/v1/health")
@@ -55,6 +60,7 @@ def test_startup_creates_writable_runtime_directories(settings) -> None:
 def test_content_can_be_temporarily_unavailable_at_startup(settings) -> None:
     settings.content_dir.rmdir()
     with TestClient(create_app(settings=settings, sqlite_check=passing_sqlite_check)) as client:
+        login(client)
         assert client.get("/api/v1/health").status_code == 200
         deadline = monotonic() + 2
         while monotonic() < deadline:
@@ -67,6 +73,7 @@ def test_content_can_be_temporarily_unavailable_at_startup(settings) -> None:
 
 def test_stage2_management_endpoints_and_listener(settings) -> None:
     with TestClient(create_app(settings=settings, sqlite_check=passing_sqlite_check)) as client:
+        login(client)
         deadline = monotonic() + 3
         while monotonic() < deadline:
             if client.get("/api/v1/admin/scan").json()["status"] in ("completed", "partial"):
@@ -84,12 +91,13 @@ def test_stage2_management_endpoints_and_listener(settings) -> None:
             sleep(0.05)
         assert waiting == 1
 
-        response = client.post("/api/v1/admin/scan")
+        response = client.post("/api/v1/admin/scan", headers={"Origin": "http://testserver"})
         assert response.status_code == 202
-        preview = client.post("/api/v1/admin/cache-cleanup/preview")
+        preview = client.post("/api/v1/admin/cache-cleanup/preview", headers={"Origin": "http://testserver"})
         assert preview.status_code == 200
         confirmation_id = preview.json()["confirmation_id"]
         assert client.post(
             "/api/v1/admin/cache-cleanup/execute",
             json={"confirmation_id": confirmation_id},
+            headers={"Origin": "http://testserver"},
         ).status_code == 200

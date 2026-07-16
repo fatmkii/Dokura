@@ -3,7 +3,7 @@ from collections.abc import Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -11,6 +11,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from dokura.config import Settings
+from dokura.api import install_stage3_api
 from dokura.constants import API_VERSION, APP_NAME, APP_VERSION, OPENAPI_VERSION
 from dokura.errors import install_error_handlers
 from dokura.i18n.zh_cn import OPENAPI_TAGS
@@ -22,6 +23,8 @@ from dokura.metadata.models import Task
 from dokura.metadata.scanning import ScanCoordinator
 from dokura.metadata.tasks import ForegroundPressure, TaskScheduler
 from dokura.metadata.watcher import watch_content
+from dokura.images import ImageService
+from dokura.security import AuthService, CredentialStore, require_same_origin, require_web_access
 from dokura.sqlite_check import SQLiteCapabilities, verify_sqlite_capabilities
 
 
@@ -64,6 +67,11 @@ def create_app(
         app.state.task_scheduler = task_scheduler
         app.state.scans = scans
         app.state.cache_cleanup = cache_cleanup
+        credentials = CredentialStore(runtime_settings.config_dir)
+        app.state.auth = AuthService(engine, writer, credentials)
+        app.state.images = ImageService(
+            engine, writer, runtime_settings.content_dir, runtime_settings.cover_dir
+        )
         workers = [
             asyncio.create_task(task_scheduler.run(), name="dokura-task-scheduler"),
             asyncio.create_task(scans.run(), name="dokura-scan-coordinator"),
@@ -99,16 +107,17 @@ def create_app(
             "api_version": API_VERSION,
         }
 
-    @app.get("/api/v1/admin/scan", tags=[OPENAPI_TAGS["background"]])
-    async def scan_status() -> dict[str, object]:
+    @app.get("/api/v1/admin/scan", tags=[OPENAPI_TAGS["background"]], dependencies=[Depends(require_web_access)])
+    async def scan_status(request: Request) -> dict[str, object]:
         return await asyncio.to_thread(app.state.scans.latest_status)
 
-    @app.post("/api/v1/admin/scan", status_code=202, tags=[OPENAPI_TAGS["background"]])
-    async def request_scan() -> dict[str, bool]:
+    @app.post("/api/v1/admin/scan", status_code=202, tags=[OPENAPI_TAGS["background"]], dependencies=[Depends(require_web_access)])
+    async def request_scan(request: Request) -> dict[str, bool]:
+        require_same_origin(request)
         return {"accepted": app.state.scans.request_scan()}
 
-    @app.get("/api/v1/admin/tasks", tags=[OPENAPI_TAGS["background"]])
-    async def task_status() -> dict[str, object]:
+    @app.get("/api/v1/admin/tasks", tags=[OPENAPI_TAGS["background"]], dependencies=[Depends(require_web_access)])
+    async def task_status(request: Request) -> dict[str, object]:
         def read_tasks() -> dict[str, object]:
             with Session(app.state.database_engine) as session:
                 tasks = session.scalars(
@@ -140,8 +149,9 @@ def create_app(
                 }
         return await asyncio.to_thread(read_tasks)
 
-    @app.post("/api/v1/admin/cache-cleanup/preview", tags=[OPENAPI_TAGS["cache"]])
-    async def cleanup_preview() -> dict[str, object]:
+    @app.post("/api/v1/admin/cache-cleanup/preview", tags=[OPENAPI_TAGS["cache"]], dependencies=[Depends(require_web_access)])
+    async def cleanup_preview(request: Request) -> dict[str, object]:
+        require_same_origin(request)
         preview = await asyncio.to_thread(app.state.cache_cleanup.preview)
         return {
             "confirmation_id": preview.confirmation_id,
@@ -150,12 +160,15 @@ def create_app(
             "estimated_bytes": preview.estimated_bytes,
         }
 
-    @app.post("/api/v1/admin/cache-cleanup/execute", tags=[OPENAPI_TAGS["cache"]])
-    async def cleanup_execute(request: CleanupExecution) -> dict[str, int]:
+    @app.post("/api/v1/admin/cache-cleanup/execute", tags=[OPENAPI_TAGS["cache"]], dependencies=[Depends(require_web_access)])
+    async def cleanup_execute(payload: CleanupExecution, request: Request) -> dict[str, int]:
+        require_same_origin(request)
         try:
-            return await asyncio.to_thread(app.state.cache_cleanup.execute, request.confirmation_id)
+            return await asyncio.to_thread(app.state.cache_cleanup.execute, payload.confirmation_id)
         except ValueError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    install_stage3_api(app)
 
     static_dir = web_dist or Path(__file__).resolve().parents[2] / "web" / "dist"
     if static_dir.is_dir():

@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import uuid
+import unicodedata
 from dataclasses import dataclass
 from datetime import timedelta
 from pathlib import Path, PurePosixPath
@@ -15,7 +16,8 @@ from sqlalchemy.orm import Session
 from dokura.metadata.analysis_service import FileSnapshot
 from dokura.metadata.database import WriteScheduler
 from dokura.metadata.filename_parser import PARSER_VERSION, parse_filename
-from dokura.metadata.models import AnalysisStatus, CoverStatus, File, Scan, Task, utc_now
+from dokura.metadata.models import AnalysisStatus, CoverStatus, Directory, File, Scan, Task, utc_now
+from dokura.metadata.natural_sort import natural_sort_bytes, normalized_casefold
 from dokura.metadata.repository import _apply_identity_and_parse, _replace_tags
 from dokura.metadata.tasks import ACTIVE_TASK_STATUSES, ForegroundPressure, TaskScheduler
 
@@ -123,6 +125,7 @@ class ScanCoordinator:
                 self.pressure.wait_background()
             root_failed = "" in failed_dirs
             changes += self._reconcile_missing(scan_id, failed_dirs, root_failed)
+            changes += self._reconcile_directories(successful_dirs, failed_dirs, root_failed)
             status = "failed" if root_failed else ("partial" if failed_dirs else "completed")
         except Exception as exc:
             logger.exception("扫描 Content 失败", extra={"scan_id": scan_id})
@@ -276,6 +279,47 @@ class ScanCoordinator:
                     parsed = parse_filename(Path(item.relative_path).name)
                     _apply_identity_and_parse(record, snapshot, item.relative_path, parsed)
                     _replace_tags(session, record, parsed)
+                    changed += 1
+        return changed
+
+    def _reconcile_directories(
+        self, successful: set[str], failed: dict[str, str], root_failed: bool
+    ) -> int:
+        """Mirror visible real directories without deleting inaccessible subtrees."""
+        changed = 0
+        visible = {path for path in successful if path}
+        failed_prefixes = tuple(path for path in failed if path)
+        with self.writer.transaction() as session:
+            existing = {item.relative_path: item for item in session.scalars(select(Directory))}
+            for path in visible:
+                parent = PurePosixPath(path).parent.as_posix()
+                parent = "" if parent == "." else parent
+                name = PurePosixPath(path).name
+                item = existing.get(path)
+                if item is None:
+                    session.add(Directory(
+                        relative_path=path, parent_path=parent, name_nfc=unicodedata.normalize("NFC", name),
+                        name_casefold=normalized_casefold(name),
+                        natural_sort_key=natural_sort_bytes(name), present=True,
+                        storage_unavailable=False,
+                    ))
+                    changed += 1
+                elif not item.present or item.storage_unavailable:
+                    item.present = True
+                    item.storage_unavailable = False
+                    changed += 1
+            for path, item in existing.items():
+                if path in visible:
+                    continue
+                inaccessible = root_failed or any(
+                    path == prefix or path.startswith(f"{prefix}/") for prefix in failed_prefixes
+                )
+                if inaccessible:
+                    if not item.storage_unavailable:
+                        item.storage_unavailable = True
+                        changed += 1
+                elif item.present:
+                    item.present = False
                     changed += 1
         return changed
 

@@ -13,6 +13,9 @@ from dokura.metadata.natural_sort import natural_sort_bytes, normalized_casefold
 def _apply_identity_and_parse(record: File, snapshot: FileSnapshot, relative_path: str, parsed) -> None:
     confidence_json, warnings_json, unclassified_json = parsed_json(parsed)
     record.relative_path = relative_path
+    record.parent_path = Path(relative_path).parent.as_posix()
+    if record.parent_path == ".":
+        record.parent_path = ""
     record.original_filename = parsed.original_filename
     record.filename_nfc = parsed.basename
     record.filename_casefold = normalized_casefold(parsed.basename)
@@ -40,9 +43,10 @@ def _replace_tags(session, record: File, parsed) -> None:
     values = (("artist", value) for value in parsed.artists)
     values = (*values, *(("source", value) for value in parsed.source_works), *(("language", value) for value in parsed.languages))
     for category, value in dict.fromkeys(values):
-        tag = session.scalar(select(Tag).where(Tag.category == category, Tag.value == value))
+        folded = normalized_casefold(value)
+        tag = session.scalar(select(Tag).where(Tag.category == category, Tag.value_casefold == folded))
         if tag is None:
-            tag = Tag(category=category, value=value, value_casefold=normalized_casefold(value))
+            tag = Tag(category=category, value=value, value_casefold=folded)
             session.add(tag)
             session.flush()
         session.add(FileTag(file_id=record.id, tag_id=tag.id))

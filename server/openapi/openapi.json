@@ -1,6 +1,24 @@
 {
   "components": {
     "schemas": {
+      "ApiKeyInput": {
+        "properties": {
+          "confirmed": {
+            "title": "Confirmed",
+            "type": "boolean"
+          },
+          "current_password": {
+            "title": "Current Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "current_password",
+          "confirmed"
+        ],
+        "title": "ApiKeyInput",
+        "type": "object"
+      },
       "CleanupExecution": {
         "properties": {
           "confirmation_id": {
@@ -25,6 +43,62 @@
           }
         },
         "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "LoginInput": {
+        "properties": {
+          "password": {
+            "title": "Password",
+            "type": "string"
+          },
+          "username": {
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "username",
+          "password"
+        ],
+        "title": "LoginInput",
+        "type": "object"
+      },
+      "PasswordInput": {
+        "properties": {
+          "current_password": {
+            "title": "Current Password",
+            "type": "string"
+          },
+          "new_password": {
+            "title": "New Password",
+            "type": "string"
+          },
+          "new_password_confirmation": {
+            "title": "New Password Confirmation",
+            "type": "string"
+          }
+        },
+        "required": [
+          "current_password",
+          "new_password",
+          "new_password_confirmation"
+        ],
+        "title": "PasswordInput",
+        "type": "object"
+      },
+      "RatingInput": {
+        "properties": {
+          "rating": {
+            "maximum": 5.0,
+            "minimum": 0.0,
+            "title": "Rating",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "rating"
+        ],
+        "title": "RatingInput",
         "type": "object"
       },
       "ValidationError": {
@@ -67,6 +141,17 @@
         "title": "ValidationError",
         "type": "object"
       }
+    },
+    "securitySchemes": {
+      "AndroidAPIKey": {
+        "scheme": "bearer",
+        "type": "http"
+      },
+      "WebSession": {
+        "in": "cookie",
+        "name": "dokura_session",
+        "type": "apiKey"
+      }
     }
   },
   "info": {
@@ -75,6 +160,84 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/admin/api-key": {
+      "get": {
+        "operationId": "api_key_status_api_v1_admin_api_key_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Api Key Status Api V1 Admin Api Key Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "WebSession": []
+          }
+        ],
+        "summary": "Api Key Status",
+        "tags": [
+          "鉴权"
+        ]
+      },
+      "post": {
+        "operationId": "rotate_api_key_api_v1_admin_api_key_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApiKeyInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Rotate Api Key Api V1 Admin Api Key Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "WebSession": []
+          }
+        ],
+        "summary": "Rotate Api Key",
+        "tags": [
+          "鉴权"
+        ]
+      }
+    },
     "/api/v1/admin/cache-cleanup/execute": {
       "post": {
         "operationId": "cleanup_execute_api_v1_admin_cache_cleanup_execute_post",
@@ -114,6 +277,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "WebSession": []
+          }
+        ],
         "summary": "Cleanup Execute",
         "tags": [
           "缓存管理"
@@ -137,9 +305,53 @@
             "description": "Successful Response"
           }
         },
+        "security": [
+          {
+            "WebSession": []
+          }
+        ],
         "summary": "Cleanup Preview",
         "tags": [
           "缓存管理"
+        ]
+      }
+    },
+    "/api/v1/admin/password": {
+      "put": {
+        "operationId": "change_password_api_v1_admin_password_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasswordInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "WebSession": []
+          }
+        ],
+        "summary": "Change Password",
+        "tags": [
+          "鉴权"
         ]
       }
     },
@@ -160,6 +372,11 @@
             "description": "Successful Response"
           }
         },
+        "security": [
+          {
+            "WebSession": []
+          }
+        ],
         "summary": "Scan Status",
         "tags": [
           "扫描与后台任务"
@@ -183,6 +400,11 @@
             "description": "Successful Response"
           }
         },
+        "security": [
+          {
+            "WebSession": []
+          }
+        ],
         "summary": "Request Scan",
         "tags": [
           "扫描与后台任务"
@@ -206,9 +428,602 @@
             "description": "Successful Response"
           }
         },
+        "security": [
+          {
+            "WebSession": []
+          }
+        ],
         "summary": "Task Status",
         "tags": [
           "扫描与后台任务"
+        ]
+      }
+    },
+    "/api/v1/auth/login": {
+      "post": {
+        "operationId": "login_api_v1_auth_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Login Api V1 Auth Login Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Login",
+        "tags": [
+          "鉴权"
+        ]
+      }
+    },
+    "/api/v1/auth/logout": {
+      "post": {
+        "operationId": "logout_api_v1_auth_logout_post",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "WebSession": []
+          }
+        ],
+        "summary": "Logout",
+        "tags": [
+          "鉴权"
+        ]
+      }
+    },
+    "/api/v1/auth/session": {
+      "get": {
+        "operationId": "session_status_api_v1_auth_session_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Session Status Api V1 Auth Session Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "WebSession": []
+          }
+        ],
+        "summary": "Session Status",
+        "tags": [
+          "鉴权"
+        ]
+      }
+    },
+    "/api/v1/catalog": {
+      "get": {
+        "operationId": "catalog_api_v1_catalog_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "path",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Path",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "per_page",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Per Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "query",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Query",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "scope",
+            "required": false,
+            "schema": {
+              "default": "current",
+              "enum": [
+                "current",
+                "recursive"
+              ],
+              "title": "Scope",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tag_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "integer"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tag Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tag_mode",
+            "required": false,
+            "schema": {
+              "default": "all",
+              "enum": [
+                "all",
+                "any"
+              ],
+              "title": "Tag Mode",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "rating_min",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "maximum": 5,
+              "minimum": 0,
+              "title": "Rating Min",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "rating_max",
+            "required": false,
+            "schema": {
+              "default": 5,
+              "maximum": 5,
+              "minimum": 0,
+              "title": "Rating Max",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "default": "name",
+              "enum": [
+                "name",
+                "size",
+                "modified",
+                "rating"
+              ],
+              "title": "Sort",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "direction",
+            "required": false,
+            "schema": {
+              "default": "asc",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "title": "Direction",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Catalog Api V1 Catalog Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "WebSession": []
+          },
+          {
+            "AndroidAPIKey": []
+          }
+        ],
+        "summary": "Catalog",
+        "tags": [
+          "目录与文件"
+        ]
+      }
+    },
+    "/api/v1/files/{file_id}": {
+      "get": {
+        "operationId": "detail_api_v1_files__file_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "file_id",
+            "required": true,
+            "schema": {
+              "title": "File Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Detail Api V1 Files  File Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "WebSession": []
+          },
+          {
+            "AndroidAPIKey": []
+          }
+        ],
+        "summary": "Detail",
+        "tags": [
+          "目录与文件"
+        ]
+      }
+    },
+    "/api/v1/files/{file_id}/cover": {
+      "get": {
+        "operationId": "cover_api_v1_files__file_id__cover_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "file_id",
+            "required": true,
+            "schema": {
+              "title": "File Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "WebSession": []
+          },
+          {
+            "AndroidAPIKey": []
+          }
+        ],
+        "summary": "Cover",
+        "tags": [
+          "图片"
+        ]
+      }
+    },
+    "/api/v1/files/{file_id}/pages/{page_number}/original": {
+      "get": {
+        "operationId": "original_api_v1_files__file_id__pages__page_number__original_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "file_id",
+            "required": true,
+            "schema": {
+              "title": "File Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "page_number",
+            "required": true,
+            "schema": {
+              "title": "Page Number",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "purpose",
+            "required": true,
+            "schema": {
+              "enum": [
+                "current",
+                "prefetch"
+              ],
+              "title": "Purpose",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "WebSession": []
+          },
+          {
+            "AndroidAPIKey": []
+          }
+        ],
+        "summary": "Original",
+        "tags": [
+          "图片"
+        ]
+      }
+    },
+    "/api/v1/files/{file_id}/pages/{page_number}/preview": {
+      "get": {
+        "operationId": "preview_api_v1_files__file_id__pages__page_number__preview_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "file_id",
+            "required": true,
+            "schema": {
+              "title": "File Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "page_number",
+            "required": true,
+            "schema": {
+              "title": "Page Number",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "size",
+            "required": true,
+            "schema": {
+              "title": "Size",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "purpose",
+            "required": false,
+            "schema": {
+              "const": "preview",
+              "default": "preview",
+              "title": "Purpose",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "WebSession": []
+          },
+          {
+            "AndroidAPIKey": []
+          }
+        ],
+        "summary": "Preview",
+        "tags": [
+          "图片"
+        ]
+      }
+    },
+    "/api/v1/files/{file_id}/rating": {
+      "put": {
+        "operationId": "set_rating_api_v1_files__file_id__rating_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "file_id",
+            "required": true,
+            "schema": {
+              "title": "File Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RatingInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Set Rating Api V1 Files  File Id  Rating Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "WebSession": []
+          },
+          {
+            "AndroidAPIKey": []
+          }
+        ],
+        "summary": "Set Rating",
+        "tags": [
+          "目录与文件"
         ]
       }
     },
@@ -259,6 +1074,83 @@
         "summary": "Identity",
         "tags": [
           "健康与身份"
+        ]
+      }
+    },
+    "/api/v1/tags": {
+      "get": {
+        "operationId": "tags_api_v1_tags_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "path",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Path",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "scope",
+            "required": false,
+            "schema": {
+              "default": "current",
+              "enum": [
+                "current",
+                "recursive"
+              ],
+              "title": "Scope",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "query",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Query",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Tags Api V1 Tags Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "WebSession": []
+          },
+          {
+            "AndroidAPIKey": []
+          }
+        ],
+        "summary": "Tags",
+        "tags": [
+          "目录与文件"
         ]
       }
     }

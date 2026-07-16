@@ -38,6 +38,7 @@ class File(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     relative_path: Mapped[str] = mapped_column(Text)
+    parent_path: Mapped[str] = mapped_column(Text, index=True)
     original_filename: Mapped[str] = mapped_column(Text)
     filename_nfc: Mapped[str] = mapped_column(Text)
     filename_casefold: Mapped[str] = mapped_column(Text, index=True)
@@ -63,6 +64,7 @@ class File(Base):
     unclassified_tags_json: Mapped[str] = mapped_column(Text, default="[]")
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     rating: Mapped[int] = mapped_column(Integer, default=0)
+    rating_updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     present: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
     storage_unavailable: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
@@ -76,6 +78,10 @@ class File(Base):
     __table_args__ = (
         Index("ix_files_identity", "device", "inode", "size"),
         Index("ix_files_visible_path", "present", "relative_path"),
+        Index("ix_files_parent_name", "present", "storage_unavailable", "parent_path", "natural_sort_key", "id"),
+        Index("ix_files_parent_rating", "present", "storage_unavailable", "parent_path", "rating", "natural_sort_key", "id"),
+        Index("ix_files_parent_size", "present", "storage_unavailable", "parent_path", "size", "natural_sort_key", "id"),
+        Index("ix_files_parent_modified", "present", "storage_unavailable", "parent_path", "modified_ns", "natural_sort_key", "id"),
     )
 
 
@@ -102,7 +108,10 @@ class Tag(Base):
     category: Mapped[str] = mapped_column(String(16))
     value: Mapped[str] = mapped_column(Text)
     value_casefold: Mapped[str] = mapped_column(Text, index=True)
-    __table_args__ = (UniqueConstraint("category", "value"),)
+    __table_args__ = (
+        UniqueConstraint("category", "value"),
+        Index("uq_tags_category_value_casefold", "category", "value_casefold", unique=True),
+    )
 
 
 class FileTag(Base):
@@ -111,6 +120,23 @@ class FileTag(Base):
     file_id: Mapped[str] = mapped_column(ForeignKey("files.id", ondelete="CASCADE"), primary_key=True)
     tag_id: Mapped[int] = mapped_column(ForeignKey("tags.id", ondelete="CASCADE"), primary_key=True)
     file: Mapped[File] = relationship(back_populates="tags")
+    __table_args__ = (Index("ix_file_tags_tag_file", "tag_id", "file_id"),)
+
+
+class Directory(Base):
+    __tablename__ = "directories"
+
+    relative_path: Mapped[str] = mapped_column(Text, primary_key=True)
+    parent_path: Mapped[str] = mapped_column(Text, index=True)
+    name_nfc: Mapped[str] = mapped_column(Text)
+    name_casefold: Mapped[str] = mapped_column(Text)
+    natural_sort_key: Mapped[bytes] = mapped_column(LargeBinary)
+    present: Mapped[bool] = mapped_column(Boolean, default=True)
+    storage_unavailable: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    __table_args__ = (
+        Index("ix_directories_parent_name", "present", "storage_unavailable", "parent_path", "natural_sort_key", "relative_path"),
+    )
 
 
 class Task(Base):
@@ -151,7 +177,17 @@ class WebSession(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime)
     last_used_at: Mapped[datetime] = mapped_column(DateTime)
     expires_at: Mapped[datetime] = mapped_column(DateTime, index=True)
+    absolute_expires_at: Mapped[datetime] = mapped_column(DateTime, index=True)
     revoked: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class LoginFailure(Base):
+    __tablename__ = "login_failures"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    source_ip: Mapped[str] = mapped_column(String(128), index=True)
+    username_casefold: Mapped[str] = mapped_column(Text, index=True)
+    failed_at: Mapped[datetime] = mapped_column(DateTime, index=True)
 
 
 class CacheEntry(Base):

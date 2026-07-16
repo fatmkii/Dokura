@@ -12,6 +12,9 @@ dependencies = [
     "watchfiles>=1.1,<2",
 ]
 
+[project.scripts]
+dokura-reset-password = "dokura.reset_password:main"
+
 [dependency-groups]
 dev = [
     "httpx2>=2.7,<2.8",
