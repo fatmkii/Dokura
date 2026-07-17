@@ -22,6 +22,18 @@ async function submit(): Promise<void> {
     const redirect = typeof route.query.redirect === "string" && route.query.redirect.startsWith("/")
       ? route.query.redirect
       : "/";
+    // Chromium may resolve fetch just before committing an HttpOnly Set-Cookie.
+    // Confirm the cookie on the same origin before App.vue checks the session.
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        await api.session();
+        break;
+      } catch (reason) {
+        if (!(reason instanceof ApiError) || reason.status !== 401 || attempt === 2) throw reason;
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
+    }
+    sessionStorage.setItem("dokura-login-handoff", "true");
     await router.replace(redirect);
   } catch (reason) {
     error.value = reason instanceof ApiError ? reason.message : zhCN.connectFailed;

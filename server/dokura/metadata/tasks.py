@@ -72,6 +72,7 @@ class TaskScheduler:
         *,
         stable_interval: float = 5,
         now: Callable[[], datetime] = utc_now,
+        operation_locks=None,
     ) -> None:
         self.engine = engine
         self.writer = writer
@@ -80,6 +81,7 @@ class TaskScheduler:
         self.pressure = pressure
         self.stable_interval = stable_interval
         self.now = now
+        self.operation_locks = operation_locks
         self._wake = asyncio.Event()
         self._analysis_lock = asyncio.Lock()
         self._stopped = False
@@ -159,17 +161,24 @@ class TaskScheduler:
 
     async def _run_task(self, task_id: str) -> None:
         async with self._analysis_lock:
-            state = await asyncio.to_thread(self._check_stability, task_id)
-            if state is None or state == "waiting":
-                return
-            path, relative_path = state
+            file_id = await asyncio.to_thread(self._task_file_id, task_id)
+            operation_lock = None
             try:
+                if self.operation_locks is not None and file_id is not None:
+                    operation_lock = await asyncio.to_thread(self.operation_locks.acquire, file_id, 5)
+                state = await asyncio.to_thread(self._check_stability, task_id)
+                if state is None or state == "waiting":
+                    return
+                path, relative_path = state
                 await asyncio.to_thread(
                     process_zip, path, relative_path, self.cover_dir, self.writer,
                     yield_check=self.pressure.wait_background,
                 )
             except FileChangedDuringAnalysis:
                 await asyncio.to_thread(self._reschedule_after_change, task_id, path)
+                self.wake()
+                return
+            except TimeoutError:
                 self.wake()
                 return
             except OSError as exc:
@@ -185,8 +194,15 @@ class TaskScheduler:
                 await asyncio.to_thread(self._record_failure, task_id, "INTERNAL_ANALYSIS_ERROR", None)
                 self.wake()
                 return
+            finally:
+                if operation_lock is not None:
+                    operation_lock.release()
             await asyncio.to_thread(self._finish_from_record, task_id)
             self.wake()
+
+    def _task_file_id(self, task_id: str) -> str | None:
+        with Session(self.engine) as session:
+            return session.scalar(select(Task.file_id).where(Task.id == task_id))
 
     def _check_stability(self, task_id: str) -> tuple[Path, str] | str | None:
         with Session(self.engine) as session:

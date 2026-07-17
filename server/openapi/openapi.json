@@ -19,6 +19,27 @@
         "title": "ApiKeyInput",
         "type": "object"
       },
+      "BatchMoveInput": {
+        "properties": {
+          "file_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "File Ids",
+            "type": "array"
+          },
+          "target_directory": {
+            "title": "Target Directory",
+            "type": "string"
+          }
+        },
+        "required": [
+          "target_directory",
+          "file_ids"
+        ],
+        "title": "BatchMoveInput",
+        "type": "object"
+      },
       "CleanupExecution": {
         "properties": {
           "confirmation_id": {
@@ -30,6 +51,49 @@
           "confirmation_id"
         ],
         "title": "CleanupExecution",
+        "type": "object"
+      },
+      "DeleteConfirmation": {
+        "properties": {
+          "file_count": {
+            "minimum": 0.0,
+            "title": "File Count",
+            "type": "integer"
+          },
+          "snapshot_id": {
+            "title": "Snapshot Id",
+            "type": "string"
+          },
+          "total_bytes": {
+            "minimum": 0.0,
+            "title": "Total Bytes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "snapshot_id",
+          "file_count",
+          "total_bytes"
+        ],
+        "title": "DeleteConfirmation",
+        "type": "object"
+      },
+      "DirectoryInput": {
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "parent": {
+            "default": "",
+            "title": "Parent",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "DirectoryInput",
         "type": "object"
       },
       "HTTPValidationError": {
@@ -61,6 +125,19 @@
           "password"
         ],
         "title": "LoginInput",
+        "type": "object"
+      },
+      "MoveInput": {
+        "properties": {
+          "target_directory": {
+            "title": "Target Directory",
+            "type": "string"
+          }
+        },
+        "required": [
+          "target_directory"
+        ],
+        "title": "MoveInput",
         "type": "object"
       },
       "PasswordInput": {
@@ -99,6 +176,94 @@
           "rating"
         ],
         "title": "RatingInput",
+        "type": "object"
+      },
+      "RenameInput": {
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "RenameInput",
+        "type": "object"
+      },
+      "SelectionInput": {
+        "properties": {
+          "direction": {
+            "default": "asc",
+            "enum": [
+              "asc",
+              "desc"
+            ],
+            "title": "Direction",
+            "type": "string"
+          },
+          "path": {
+            "default": "",
+            "title": "Path",
+            "type": "string"
+          },
+          "query": {
+            "default": "",
+            "title": "Query",
+            "type": "string"
+          },
+          "rating_max": {
+            "default": 5,
+            "maximum": 5.0,
+            "minimum": 0.0,
+            "title": "Rating Max",
+            "type": "integer"
+          },
+          "rating_min": {
+            "default": 0,
+            "maximum": 5.0,
+            "minimum": 0.0,
+            "title": "Rating Min",
+            "type": "integer"
+          },
+          "scope": {
+            "default": "current",
+            "enum": [
+              "current",
+              "recursive"
+            ],
+            "title": "Scope",
+            "type": "string"
+          },
+          "sort": {
+            "default": "name",
+            "enum": [
+              "name",
+              "size",
+              "modified",
+              "rating"
+            ],
+            "title": "Sort",
+            "type": "string"
+          },
+          "tag_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Tag Ids",
+            "type": "array"
+          },
+          "tag_mode": {
+            "default": "all",
+            "enum": [
+              "all",
+              "any"
+            ],
+            "title": "Tag Mode",
+            "type": "string"
+          }
+        },
+        "title": "SelectionInput",
         "type": "object"
       },
       "ValidationError": {
@@ -316,6 +481,466 @@
         ]
       }
     },
+    "/api/v1/admin/directories": {
+      "delete": {
+        "operationId": "delete_directory_api_v1_admin_directories_delete",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "path",
+            "required": true,
+            "schema": {
+              "title": "Path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "WebSession": []
+          }
+        ],
+        "summary": "Delete Directory",
+        "tags": [
+          "文件管理"
+        ]
+      },
+      "post": {
+        "operationId": "create_directory_api_v1_admin_directories_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DirectoryInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "WebSession": []
+          }
+        ],
+        "summary": "Create Directory",
+        "tags": [
+          "文件管理"
+        ]
+      }
+    },
+    "/api/v1/admin/directories/move": {
+      "post": {
+        "operationId": "move_directory_api_v1_admin_directories_move_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "path",
+            "required": true,
+            "schema": {
+              "title": "Path",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MoveInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "WebSession": []
+          }
+        ],
+        "summary": "Move Directory",
+        "tags": [
+          "文件管理"
+        ]
+      }
+    },
+    "/api/v1/admin/directories/name": {
+      "put": {
+        "operationId": "rename_directory_api_v1_admin_directories_name_put",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "path",
+            "required": true,
+            "schema": {
+              "title": "Path",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenameInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "WebSession": []
+          }
+        ],
+        "summary": "Rename Directory",
+        "tags": [
+          "文件管理"
+        ]
+      }
+    },
+    "/api/v1/admin/files/move": {
+      "post": {
+        "operationId": "move_files_api_v1_admin_files_move_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchMoveInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "WebSession": []
+          }
+        ],
+        "summary": "Move Files",
+        "tags": [
+          "文件管理"
+        ]
+      }
+    },
+    "/api/v1/admin/files/{file_id}": {
+      "delete": {
+        "operationId": "delete_file_api_v1_admin_files__file_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "file_id",
+            "required": true,
+            "schema": {
+              "title": "File Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "WebSession": []
+          }
+        ],
+        "summary": "Delete File",
+        "tags": [
+          "文件管理"
+        ]
+      }
+    },
+    "/api/v1/admin/files/{file_id}/name": {
+      "put": {
+        "operationId": "rename_file_api_v1_admin_files__file_id__name_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "file_id",
+            "required": true,
+            "schema": {
+              "title": "File Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenameInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "WebSession": []
+          }
+        ],
+        "summary": "Rename File",
+        "tags": [
+          "文件管理"
+        ]
+      }
+    },
+    "/api/v1/admin/files/{file_id}/reprocess": {
+      "post": {
+        "operationId": "reprocess_api_v1_admin_files__file_id__reprocess_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "file_id",
+            "required": true,
+            "schema": {
+              "title": "File Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "WebSession": []
+          }
+        ],
+        "summary": "Reprocess",
+        "tags": [
+          "扫描与后台任务"
+        ]
+      }
+    },
+    "/api/v1/admin/logs": {
+      "get": {
+        "operationId": "logs_api_v1_admin_logs_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "level",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Level"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "WebSession": []
+          }
+        ],
+        "summary": "Logs",
+        "tags": [
+          "后台日志"
+        ]
+      }
+    },
+    "/api/v1/admin/logs/archive": {
+      "get": {
+        "operationId": "log_archive_api_v1_admin_logs_archive_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "WebSession": []
+          }
+        ],
+        "summary": "Log Archive",
+        "tags": [
+          "后台日志"
+        ]
+      }
+    },
     "/api/v1/admin/password": {
       "put": {
         "operationId": "change_password_api_v1_admin_password_put",
@@ -411,9 +1036,216 @@
         ]
       }
     },
+    "/api/v1/admin/selection": {
+      "delete": {
+        "operationId": "clear_selection_api_v1_admin_selection_delete",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "WebSession": []
+          }
+        ],
+        "summary": "Clear Selection",
+        "tags": [
+          "文件管理"
+        ]
+      },
+      "get": {
+        "operationId": "get_selection_api_v1_admin_selection_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "WebSession": []
+          }
+        ],
+        "summary": "Get Selection",
+        "tags": [
+          "文件管理"
+        ]
+      },
+      "post": {
+        "operationId": "create_selection_api_v1_admin_selection_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SelectionInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "WebSession": []
+          }
+        ],
+        "summary": "Create Selection",
+        "tags": [
+          "文件管理"
+        ]
+      }
+    },
+    "/api/v1/admin/selection/delete": {
+      "post": {
+        "operationId": "delete_selection_api_v1_admin_selection_delete_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeleteConfirmation"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "WebSession": []
+          }
+        ],
+        "summary": "Delete Selection",
+        "tags": [
+          "文件管理"
+        ]
+      }
+    },
+    "/api/v1/admin/selection/delete-preview": {
+      "post": {
+        "operationId": "delete_preview_api_v1_admin_selection_delete_preview_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "WebSession": []
+          }
+        ],
+        "summary": "Delete Preview",
+        "tags": [
+          "文件管理"
+        ]
+      }
+    },
+    "/api/v1/admin/selection/move": {
+      "post": {
+        "operationId": "move_selection_api_v1_admin_selection_move_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MoveInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "WebSession": []
+          }
+        ],
+        "summary": "Move Selection",
+        "tags": [
+          "文件管理"
+        ]
+      }
+    },
     "/api/v1/admin/tasks": {
       "get": {
         "operationId": "task_status_api_v1_admin_tasks_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -426,6 +1258,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "security": [
@@ -434,6 +1276,30 @@
           }
         ],
         "summary": "Task Status",
+        "tags": [
+          "扫描与后台任务"
+        ]
+      }
+    },
+    "/api/v1/admin/tasks/retry-failed": {
+      "post": {
+        "operationId": "retry_failed_api_v1_admin_tasks_retry_failed_post",
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "WebSession": []
+          }
+        ],
+        "summary": "Retry Failed",
         "tags": [
           "扫描与后台任务"
         ]

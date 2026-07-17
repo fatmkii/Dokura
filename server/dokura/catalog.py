@@ -169,6 +169,13 @@ def list_catalog(engine, query: CatalogQuery) -> dict[str, object]:
         }
 
 
+def matching_file_ids(engine, query: CatalogQuery) -> list[str]:
+    """Return the stable UUID set used by a cross-page management snapshot."""
+    filters, params = _file_filters(query)
+    with Session(engine) as session:
+        return list(session.scalars(select(File.id).where(*filters).order_by(File.id), params))
+
+
 def tag_candidates(engine, *, path: str, scope: str, keyword: str = "") -> list[dict[str, object]]:
     folded = normalized_casefold(keyword.strip())
     with Session(engine) as session:

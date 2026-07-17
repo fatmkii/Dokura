@@ -76,6 +76,8 @@ def install_stage3_api(app: FastAPI) -> None:
     @app.post("/api/v1/auth/logout", status_code=204, tags=["鉴权"])
     async def logout(request: Request, response: Response, principal: Principal = Depends(require_web_access)) -> Response:
         require_same_origin(request)
+        if principal.session_id and hasattr(app.state, "management"):
+            await asyncio.to_thread(app.state.management.release_snapshot, principal.session_id)
         await asyncio.to_thread(auth.revoke, principal.session_id)
         response.delete_cookie(SESSION_COOKIE, path="/")
         response.status_code = 204
@@ -205,17 +207,30 @@ def install_stage3_api(app: FastAPI) -> None:
         etag = image_etag(file_id, record.content_version, page_number, "original")
         if request.headers.get("If-None-Match") == etag:
             return Response(status_code=304, headers={"ETag": etag, "Cache-Control": "private, max-age=31536000, immutable"})
+        operation_lock = None
         try:
+            if images.operation_locks is not None:
+                operation_lock = await asyncio.to_thread(images.operation_locks.acquire, file_id, 5)
             await asyncio.to_thread(images.validate_original_header, record)
         except DeterministicPageError as exc:
             await asyncio.to_thread(images.mark_unavailable, record, exc.code)
+            if operation_lock is not None:
+                operation_lock.release()
             raise HTTPException(status_code=410, detail="页面不可用") from exc
         except TemporaryReadError as exc:
+            if operation_lock is not None:
+                operation_lock.release()
             raise HTTPException(status_code=503, detail="图片暂时无法读取", headers={"Retry-After": "1"}) from exc
+        except Exception:
+            if operation_lock is not None:
+                operation_lock.release()
+            raise
         media_type = "image/png" if Path(record.entry_name).suffix.casefold() == ".png" else "image/jpeg"
         try:
             await images.scheduler.acquire(purpose, _client_id(request))
         except ImageBusyError as exc:
+            if operation_lock is not None:
+                operation_lock.release()
             raise HTTPException(status_code=503, detail="图片服务繁忙", headers={"Retry-After": "1"}) from exc
-        stream = images.original_stream(record, purpose, _client_id(request), admitted=True)
+        stream = images.original_stream(record, purpose, _client_id(request), admitted=True, operation_lock=operation_lock)
         return StreamingResponse(stream, media_type=media_type, headers={"ETag": etag, "Cache-Control": "private, max-age=31536000, immutable"})

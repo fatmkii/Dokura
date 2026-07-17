@@ -1,4 +1,4 @@
-import type { ApiErrorBody, CatalogResponse, CatalogState, FileDetail, Tag } from "./types";
+import type { ApiErrorBody, CatalogResponse, CatalogState, FileDetail, OperationResult, Tag, TaskItem } from "./types";
 import { zhCN } from "./locales/zh-CN";
 
 export class ApiError extends Error {
@@ -69,6 +69,39 @@ export const api = {
       method: "PUT",
       body: JSON.stringify({ rating }),
     }),
+  selection: (state: CatalogState) => request<{ id: string; count: number; expires_in_seconds: number }>("/api/v1/admin/selection", {
+    method: "POST",
+    body: JSON.stringify({
+      path: state.path, query: state.query, scope: state.scope, tag_ids: state.tagIds,
+      tag_mode: state.tagMode, rating_min: state.ratingMin, rating_max: state.ratingMax,
+      sort: state.sort, direction: state.direction,
+    }),
+  }),
+  selectionStatus: () => request<{ active: boolean; id: string | null; count: number }>("/api/v1/admin/selection"),
+  clearSelection: () => request<void>("/api/v1/admin/selection", { method: "DELETE" }),
+  deletePreview: () => request<{ snapshot_id: string; file_count: number; total_bytes: number }>("/api/v1/admin/selection/delete-preview", { method: "POST" }),
+  deleteSelection: (snapshotId: string, fileCount: number, totalBytes: number) => request<OperationResult & { reconfirmation_required: boolean; snapshot_id?: string; file_count?: number; total_bytes?: number }>("/api/v1/admin/selection/delete", {
+    method: "POST", body: JSON.stringify({ snapshot_id: snapshotId, file_count: fileCount, total_bytes: totalBytes }),
+  }),
+  moveSelection: (targetDirectory: string) => request<OperationResult>("/api/v1/admin/selection/move", { method: "POST", body: JSON.stringify({ target_directory: targetDirectory }) }),
+  moveFiles: (fileIds: string[], targetDirectory: string) => request<OperationResult>("/api/v1/admin/files/move", { method: "POST", body: JSON.stringify({ file_ids: fileIds, target_directory: targetDirectory }) }),
+  deleteFile: (id: string) => request<OperationResult>(`/api/v1/admin/files/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  renameFile: (id: string, name: string) => request<{ relative_path: string }>(`/api/v1/admin/files/${encodeURIComponent(id)}/name`, { method: "PUT", body: JSON.stringify({ name }) }),
+  reprocess: (id: string) => request<{ accepted: boolean }>(`/api/v1/admin/files/${encodeURIComponent(id)}/reprocess`, { method: "POST" }),
+  createDirectory: (parent: string, name: string) => request<{ relative_path: string }>("/api/v1/admin/directories", { method: "POST", body: JSON.stringify({ parent, name }) }),
+  renameDirectory: (path: string, name: string) => request<{ relative_path: string }>(`/api/v1/admin/directories/name?path=${encodeURIComponent(path)}`, { method: "PUT", body: JSON.stringify({ name }) }),
+  moveDirectory: (path: string, targetDirectory: string) => request<{ relative_path: string }>(`/api/v1/admin/directories/move?path=${encodeURIComponent(path)}`, { method: "POST", body: JSON.stringify({ target_directory: targetDirectory }) }),
+  deleteDirectory: (path: string) => request<void>(`/api/v1/admin/directories?path=${encodeURIComponent(path)}`, { method: "DELETE" }),
+  scanStatus: () => request<Record<string, unknown>>("/api/v1/admin/scan"),
+  scan: () => request<{ accepted: boolean }>("/api/v1/admin/scan", { method: "POST" }),
+  tasks: () => request<{ waiting_count: number; items: TaskItem[] }>("/api/v1/admin/tasks"),
+  retryFailed: () => request<{ eligible: number; added: number; skipped: number }>("/api/v1/admin/tasks/retry-failed", { method: "POST" }),
+  apiKey: () => request<{ suffix: string }>("/api/v1/admin/api-key"),
+  rotateApiKey: (currentPassword: string) => request<{ api_key: string; suffix: string }>("/api/v1/admin/api-key", { method: "POST", body: JSON.stringify({ current_password: currentPassword, confirmed: true }) }),
+  changePassword: (currentPassword: string, newPassword: string, confirmation: string) => request<void>("/api/v1/admin/password", { method: "PUT", body: JSON.stringify({ current_password: currentPassword, new_password: newPassword, new_password_confirmation: confirmation }) }),
+  cleanupPreview: () => request<{ confirmation_id: string; file_count: number; cache_file_count: number; estimated_bytes: number }>("/api/v1/admin/cache-cleanup/preview", { method: "POST" }),
+  cleanup: (confirmationId: string) => request<{ released_bytes: number; success_count: number; busy_skipped_count: number; failure_count: number }>("/api/v1/admin/cache-cleanup/execute", { method: "POST", body: JSON.stringify({ confirmation_id: confirmationId }) }),
+  logs: (levels: string[]) => request<{ items: { level: string; message: string }[]; write_error: string | null }>(`/api/v1/admin/logs?${new URLSearchParams(levels.map((level) => ["level", level]))}`),
 };
 
 export function coverUrl(id: string): string {

@@ -64,6 +64,30 @@ function read(page: number): void {
   void router.push({ name: "reader", params: { id: detail.value.id, page }, query: { from: route.fullPath } });
 }
 
+async function renameFile(): Promise<void> {
+  if (!detail.value) return;
+  const current = detail.value.name.replace(/\.zip$/i, "");
+  const name = prompt("新的 ZIP 名称（无需输入 .zip）", current);
+  if (!name || name === current) return;
+  try { await api.renameFile(detail.value.id, name); message.success("文件已重命名"); await load(); }
+  catch (reason) { message.error(reason instanceof ApiError ? reason.message : zhCN.requestFailed); }
+}
+
+async function reprocess(): Promise<void> {
+  if (!detail.value) return;
+  try { const result = await api.reprocess(detail.value.id); message.success(result.accepted ? "已加入重新处理队列" : "文件已经在处理队列中"); await load(); }
+  catch (reason) { message.error(reason instanceof ApiError ? reason.message : zhCN.requestFailed); }
+}
+
+async function deleteFile(): Promise<void> {
+  if (!detail.value || !confirm(`将永久删除“${detail.value.name}”。此操作无法撤销，是否继续？`)) return;
+  try {
+    const result = await api.deleteFile(detail.value.id);
+    if (result.failure_count) throw new Error(result.failed[0]?.reason);
+    message.success("文件已永久删除"); await router.replace(backTarget.value);
+  } catch (reason) { message.error(reason instanceof ApiError || reason instanceof Error ? reason.message : zhCN.requestFailed); }
+}
+
 watch(() => route.params.id, load, { immediate: true });
 onBeforeUnmount(() => {
   controller?.abort();
@@ -96,6 +120,9 @@ onBeforeUnmount(() => {
           <div class="detail-actions">
             <RatingPicker :model-value="detail.rating" @update:model-value="updateRating" />
             <button class="primary-button" type="button" :disabled="detail.page_count === 0" @click="read(1)">{{ zhCN.browseFromFirst }}<span>→</span></button>
+            <button class="quiet-button" type="button" @click="renameFile">{{ zhCN.rename }}</button>
+            <button class="quiet-button" type="button" @click="reprocess">{{ zhCN.reprocess }}</button>
+            <button class="danger-link" type="button" @click="deleteFile">{{ zhCN.permanentDelete }}</button>
           </div>
         </div>
         <dl class="detail-summary">

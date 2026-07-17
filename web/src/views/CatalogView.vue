@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useMessage } from "naive-ui";
 import { useRoute, useRouter } from "vue-router";
 
@@ -23,6 +23,9 @@ const error = ref("");
 const previousVersion = ref("");
 const versionChanged = ref(false);
 const showDefaultPassword = ref(sessionStorage.getItem("dokura-default-password") === "true");
+const selected = ref(new Set<string>());
+const snapshot = ref<{ id: string; count: number }>();
+const managing = ref(false);
 let requestController: AbortController | undefined;
 let searchTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -33,6 +36,8 @@ const breadcrumbs = computed(() => {
 const activeFilterCount = computed(() => state.value.tagIds.length + (state.value.ratingMin !== 0 || state.value.ratingMax !== 5 ? 1 : 0));
 const directories = computed(() => result.value?.items.filter((item) => item.kind === "directory") ?? []);
 const files = computed(() => result.value?.items.filter((item) => item.kind === "file") ?? []);
+const allPageSelected = computed(() => files.value.length > 0 && files.value.every((item) => selected.value.has(item.id)));
+const selectedCount = computed(() => snapshot.value?.count ?? selected.value.size);
 
 function dismissDefaultPassword(): void {
   sessionStorage.removeItem("dokura-default-password");
@@ -105,6 +110,91 @@ function clearFilters(): void {
   replaceState({ tagIds: [], ratingMin: 0, ratingMax: 5 });
 }
 
+function toggleFile(id: string): void {
+  const next = new Set(selected.value);
+  next.has(id) ? next.delete(id) : next.add(id);
+  selected.value = next;
+}
+
+function togglePage(): void {
+  const next = new Set(selected.value);
+  for (const item of files.value) allPageSelected.value ? next.delete(item.id) : next.add(item.id);
+  selected.value = next;
+}
+
+async function selectAllResults(): Promise<void> {
+  managing.value = true;
+  try {
+    const result = await api.selection(state.value);
+    snapshot.value = { id: result.id, count: result.count };
+    selected.value = new Set();
+  } catch (reason) { message.error(reason instanceof ApiError ? reason.message : zhCN.requestFailed); }
+  finally { managing.value = false; }
+}
+
+async function clearSelection(): Promise<void> {
+  if (snapshot.value) await api.clearSelection();
+  snapshot.value = undefined;
+  selected.value = new Set();
+}
+
+async function moveSelected(): Promise<void> {
+  const target = prompt("请输入 Content 内已有的目标文件夹相对路径；根目录留空。", state.value.path);
+  if (target == null) return;
+  managing.value = true;
+  try {
+    const result = snapshot.value ? await api.moveSelection(target) : await api.moveFiles([...selected.value], target);
+    message.success(`移动成功 ${result.success_count} 项，失败 ${result.failure_count} 项`);
+    if (result.failed.length) message.warning(result.failed.map((item) => item.reason).join("；"));
+    await clearSelection(); await load();
+  } catch (reason) { message.error(reason instanceof ApiError ? reason.message : zhCN.requestFailed); }
+  finally { managing.value = false; }
+}
+
+async function deleteSelected(): Promise<void> {
+  if (!snapshot.value) { message.warning("批量永久删除前请先选择全部筛选结果，确保服务端建立选择快照。"); return; }
+  managing.value = true;
+  try {
+    let preview = await api.deletePreview();
+    if (!confirm(`将永久删除 ${preview.file_count} 个 ZIP，共 ${formatBytes(preview.total_bytes)}。此操作无法撤销，是否继续？`)) return;
+    let result = await api.deleteSelection(preview.snapshot_id, preview.file_count, preview.total_bytes);
+    if (result.reconfirmation_required) {
+      if (!confirm(`选择统计已变化：现在为 ${result.file_count} 个 ZIP，共 ${formatBytes(result.total_bytes ?? 0)}。请重新确认永久删除。`)) return;
+      result = await api.deleteSelection(result.snapshot_id ?? preview.snapshot_id, result.file_count ?? 0, result.total_bytes ?? 0);
+    }
+    message.success(`永久删除成功 ${result.success_count} 项，失败 ${result.failure_count} 项`);
+    await clearSelection(); await load();
+  } catch (reason) { message.error(reason instanceof ApiError ? reason.message : zhCN.requestFailed); }
+  finally { managing.value = false; }
+}
+
+async function createFolder(): Promise<void> {
+  const name = prompt("新文件夹名称");
+  if (!name) return;
+  try { await api.createDirectory(state.value.path, name); message.success("文件夹已创建"); await load(); }
+  catch (reason) { message.error(reason instanceof ApiError ? reason.message : zhCN.requestFailed); }
+}
+
+async function renameFolder(path: string, currentName: string): Promise<void> {
+  const name = prompt("新的文件夹名称", currentName);
+  if (!name || name === currentName) return;
+  try { await api.renameDirectory(path, name); message.success("文件夹已重命名"); await load(); }
+  catch (reason) { message.error(reason instanceof ApiError ? reason.message : zhCN.requestFailed); }
+}
+
+async function moveFolder(path: string): Promise<void> {
+  const target = prompt("目标文件夹相对路径；根目录留空。", state.value.path);
+  if (target == null) return;
+  try { await api.moveDirectory(path, target); message.success("文件夹已移动"); await load(); }
+  catch (reason) { message.error(reason instanceof ApiError ? reason.message : zhCN.requestFailed); }
+}
+
+async function deleteFolder(path: string): Promise<void> {
+  if (!confirm("仅实际为空的文件夹可以删除。是否继续？")) return;
+  try { await api.deleteDirectory(path); message.success("空文件夹已删除"); await load(); }
+  catch (reason) { message.error(reason instanceof ApiError ? reason.message : zhCN.requestFailed); }
+}
+
 function setRatingMin(value: number): void {
   replaceState({ ratingMin: value, ratingMax: Math.max(value, state.value.ratingMax) });
 }
@@ -124,6 +214,13 @@ watch(() => route.query, (query) => {
   searchInput.value = state.value.query;
   void load();
 }, { deep: true, immediate: true });
+
+onMounted(async () => {
+  try {
+    const restored = await api.selectionStatus();
+    if (restored.active && restored.id) snapshot.value = { id: restored.id, count: restored.count };
+  } catch { /* Session handling remains owned by App.vue. */ }
+});
 
 onBeforeUnmount(() => {
   requestController?.abort();
@@ -186,6 +283,7 @@ onBeforeUnmount(() => {
         <label>{{ zhCN.maximum }} <select :value="state.ratingMax" @change="setRatingMax(Number(($event.target as HTMLSelectElement).value))"><option v-for="n in 6" :key="n - 1" :value="n - 1">{{ n - 1 }}</option></select></label>
       </div>
       <button v-if="activeFilterCount" class="clear-button" type="button" @click="clearFilters">{{ zhCN.clearFilters }}</button>
+      <button class="clear-button folder-create" type="button" @click="createFolder">＋ {{ zhCN.createFolder }}</button>
     </section>
 
     <div v-if="versionChanged" class="version-notice" role="status">{{ zhCN.listUpdated }}<button type="button" @click="versionChanged = false; replaceState({ page: 1 }, false)">{{ zhCN.refresh }}</button></div>
@@ -194,10 +292,13 @@ onBeforeUnmount(() => {
     <StatePanel v-else-if="error" :title="zhCN.loadFailed" :message="error" kind="error" :action="zhCN.retry" @action="load" />
     <StatePanel v-else-if="!result?.items.length" :title="activeFilterCount || state.query ? zhCN.emptyFiltered : zhCN.empty" kind="empty" />
     <section v-else class="catalog-list" :aria-busy="loading">
-      <button v-for="item in directories" :key="`dir-${item.relative_path}`" class="directory-row" type="button" @click="openDirectory(item.relative_path)">
-        <span class="folder-icon" aria-hidden="true"></span><strong>{{ item.name }}</strong><small>{{ item.relative_path }}</small><i>→</i>
-      </button>
+      <div v-if="files.length" class="selection-row"><label><input type="checkbox" :checked="allPageSelected" @change="togglePage" /> {{ zhCN.selectPage }}</label><button type="button" @click="selectAllResults">{{ zhCN.selectAllResults }} {{ result?.total }}</button></div>
+      <div v-for="item in directories" :key="`dir-${item.relative_path}`" class="directory-row">
+        <button class="directory-open" type="button" @click="openDirectory(item.relative_path)"><span class="folder-icon" aria-hidden="true"></span><strong>{{ item.name }}</strong><small>{{ item.relative_path }}</small></button>
+        <div class="row-management"><button type="button" @click="renameFolder(item.relative_path, item.name)">{{ zhCN.rename }}</button><button type="button" @click="moveFolder(item.relative_path)">{{ zhCN.move }}</button><button class="danger-link" type="button" @click="deleteFolder(item.relative_path)">{{ zhCN.permanentDelete }}</button><i>→</i></div>
+      </div>
       <article v-for="item in files" :key="item.id" class="file-row">
+        <label class="row-check"><input type="checkbox" :checked="selected.has(item.id)" :aria-label="`${zhCN.select} ${item.name}`" @change="toggleFile(item.id)" /></label>
         <RouterLink class="file-cover" :to="{ name: 'detail', params: { id: item.id }, query: { from: route.fullPath } }" :aria-label="zhCN.viewFile(item.name)">
           <img v-if="item.cover_status === 'ready'" :src="coverUrl(item.id)" alt="" loading="lazy" /><span v-else>ZIP</span>
         </RouterLink>
@@ -211,6 +312,8 @@ onBeforeUnmount(() => {
         <RouterLink class="row-arrow" :to="{ name: 'detail', params: { id: item.id }, query: { from: route.fullPath } }" :aria-label="zhCN.viewDetails">→</RouterLink>
       </article>
     </section>
+
+    <aside v-if="selectedCount" class="batch-bar" aria-live="polite"><div><strong>{{ selectedCount }}</strong><span>{{ snapshot ? '个快照项目' : '个当前选择' }}</span></div><p v-if="snapshot">选择快照可跨分页恢复，30 分钟无操作后过期。</p><button type="button" :disabled="managing" @click="moveSelected">{{ zhCN.move }}</button><button class="danger-button" type="button" :disabled="managing" @click="deleteSelected">{{ zhCN.permanentDelete }}</button><button class="batch-close" type="button" :aria-label="zhCN.cancelSelection" @click="clearSelection">×</button></aside>
 
     <nav v-if="result && result.pages > 1" class="pagination" :aria-label="zhCN.paginationLabel">
       <button type="button" :disabled="state.page <= 1" @click="replaceState({ page: state.page - 1 }, false)">{{ zhCN.previousPage }}</button>

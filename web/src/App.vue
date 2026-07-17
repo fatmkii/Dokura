@@ -44,8 +44,16 @@ async function checkSession(): Promise<void> {
   }
 }
 
+function acceptLoginHandoff(): boolean {
+  if (sessionStorage.getItem("dokura-login-handoff") !== "true") return false;
+  sessionStorage.removeItem("dokura-login-handoff");
+  sessionState.value = "authenticated";
+  return true;
+}
+
 watch(() => route.fullPath, () => {
   if (route.meta.public) sessionState.value = "anonymous";
+  else if (acceptLoginHandoff()) return;
   else if (sessionState.value !== "authenticated") void checkSession();
 });
 watch(resolvedDark, (dark) => document.documentElement.dataset.theme = dark ? "dark" : "light", { immediate: true });

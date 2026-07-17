@@ -16,6 +16,8 @@ from dokura.constants import API_VERSION, APP_NAME, APP_VERSION, OPENAPI_VERSION
 from dokura.errors import install_error_handlers
 from dokura.i18n.zh_cn import OPENAPI_TAGS
 from dokura.logging import configure_logging
+from dokura.logfiles import LogManager
+from dokura.management import FileOperationLocks, ManagementService
 from dokura.metadata.database import WriteScheduler, create_database_engine
 from dokura.metadata.cache_cleanup import CacheCleanupManager
 from dokura.metadata.migrations import upgrade_database
@@ -26,6 +28,7 @@ from dokura.metadata.watcher import watch_content
 from dokura.images import ImageService
 from dokura.security import AuthService, CredentialStore, require_same_origin, require_web_access
 from dokura.sqlite_check import SQLiteCapabilities, verify_sqlite_capabilities
+from dokura.stage5_api import install_stage5_api
 
 
 SQLiteCheck = Callable[[], SQLiteCapabilities]
@@ -46,6 +49,8 @@ def create_app(
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         configure_logging()
+        logs = LogManager(runtime_settings.config_dir)
+        logs.install()
         capabilities = sqlite_check()
         runtime_settings.prepare()
         upgrade_database(runtime_settings.database_path)
@@ -55,8 +60,10 @@ def create_app(
         app.state.database_engine = engine
         writer = WriteScheduler(engine)
         pressure = ForegroundPressure()
+        operation_locks = FileOperationLocks()
         task_scheduler = TaskScheduler(
-            engine, writer, runtime_settings.content_dir, runtime_settings.cover_dir, pressure
+            engine, writer, runtime_settings.content_dir, runtime_settings.cover_dir, pressure,
+            operation_locks=operation_locks,
         )
         scans = ScanCoordinator(engine, writer, runtime_settings.content_dir, task_scheduler, pressure)
         cache_cleanup = CacheCleanupManager(
@@ -67,10 +74,16 @@ def create_app(
         app.state.task_scheduler = task_scheduler
         app.state.scans = scans
         app.state.cache_cleanup = cache_cleanup
+        app.state.operation_locks = operation_locks
+        app.state.management = ManagementService(
+            engine, writer, runtime_settings.content_dir, scans, task_scheduler, operation_locks
+        )
+        app.state.logs = logs
         credentials = CredentialStore(runtime_settings.config_dir)
         app.state.auth = AuthService(engine, writer, credentials)
         app.state.images = ImageService(
-            engine, writer, runtime_settings.content_dir, runtime_settings.cover_dir
+            engine, writer, runtime_settings.content_dir, runtime_settings.cover_dir,
+            operation_locks,
         )
         workers = [
             asyncio.create_task(task_scheduler.run(), name="dokura-task-scheduler"),
@@ -85,6 +98,7 @@ def create_app(
             for worker in workers:
                 worker.cancel()
             await asyncio.gather(*workers, return_exceptions=True)
+            logs.handler.close()
             engine.dispose()
 
     app = FastAPI(
@@ -117,12 +131,17 @@ def create_app(
         return {"accepted": app.state.scans.request_scan()}
 
     @app.get("/api/v1/admin/tasks", tags=[OPENAPI_TAGS["background"]], dependencies=[Depends(require_web_access)])
-    async def task_status(request: Request) -> dict[str, object]:
+    async def task_status(request: Request, page: int = 1) -> dict[str, object]:
         def read_tasks() -> dict[str, object]:
             with Session(app.state.database_engine) as session:
-                tasks = session.scalars(
-                    select(Task).order_by(Task.updated_at.desc()).limit(100)
-                ).all()
+                active = session.scalars(select(Task).where(Task.status == "analyzing").order_by(Task.started_at)).all()
+                queued = session.scalars(select(Task).where(
+                    Task.status.in_(("waiting_stable", "retry_wait"))
+                ).order_by(Task.priority.desc(), Task.created_at).offset((max(1, page) - 1) * 50).limit(50)).all()
+                history = session.scalars(select(Task).where(
+                    ~Task.status.in_(("analyzing", "waiting_stable", "retry_wait"))
+                ).order_by(Task.updated_at.desc()).limit(100)).all()
+                tasks = [*active, *queued, *history]
                 waiting = session.scalar(select(func.count()).select_from(Task).where(
                     Task.status.in_(("waiting_stable", "retry_wait"))
                 ))
@@ -169,6 +188,7 @@ def create_app(
             raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     install_stage3_api(app)
+    install_stage5_api(app)
 
     static_dir = web_dist or Path(__file__).resolve().parents[2] / "web" / "dist"
     if static_dir.is_dir():

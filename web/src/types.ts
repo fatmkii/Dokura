@@ -87,3 +87,26 @@ export interface CatalogState {
   sort: SortKey;
   direction: SortDirection;
 }
+
+export interface OperationResult {
+  success_count: number;
+  failure_count: number;
+  succeeded: string[];
+  failed: { id: string; reason: string }[];
+}
+
+export interface TaskItem {
+  id: string;
+  file_id: string | null;
+  relative_path: string | null;
+  type: string;
+  status: string;
+  priority: number;
+  retry_count: number;
+  max_retries: number;
+  next_run_at: string | null;
+  last_error: string | null;
+  created_at: string;
+  started_at: string | null;
+  updated_at: string;
+}

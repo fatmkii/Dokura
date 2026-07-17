@@ -1,0 +1,21 @@
+services:
+  dokura:
+    build:
+      context: ../..
+    image: dokura:stage-05
+    user: "${DOKURA_STAGE5_UID:?required}:${DOKURA_STAGE5_GID:?required}"
+    environment:
+      DOKURA_CONTENT_DIR: /data/content
+      DOKURA_METADATA_DIR: /data/metadata
+      DOKURA_CONFIG_DIR: /data/config
+    ports:
+      - "127.0.0.1:${DOKURA_STAGE5_PORT:-18005}:8000"
+    volumes:
+      - ${DOKURA_STAGE5_CONTENT:?required}:/data/content
+      - ${DOKURA_STAGE5_METADATA:?required}:/data/metadata
+      - ${DOKURA_STAGE5_CONFIG:?required}:/data/config
+    healthcheck:
+      test: ["CMD", ".venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health', timeout=2)"]
+      interval: 2s
+      timeout: 2s
+      retries: 30

@@ -10,7 +10,7 @@ const props = defineProps<{ theme: ThemeMode }>();
 const emit = defineEmits<{ theme: [mode: ThemeMode] }>();
 const route = useRoute();
 const router = useRouter();
-const isCatalog = computed(() => route.name === "catalog");
+const context = computed(() => ({ catalog: zhCN.library, detail: zhCN.details, settings: zhCN.settings, tasks: zhCN.tasks, logs: zhCN.logs }[String(route.name)] ?? ""));
 
 async function logout(): Promise<void> {
   try {
@@ -28,9 +28,10 @@ async function logout(): Promise<void> {
       <span>{{ zhCN.brand }}<small>{{ zhCN.library }}</small></span>
     </RouterLink>
     <div class="header-context" aria-hidden="true">
-      <span></span>{{ isCatalog ? zhCN.library : route.name === "detail" ? zhCN.details : "" }}
+      <span></span>{{ context }}
     </div>
     <div class="header-actions">
+      <nav class="admin-nav" :aria-label="zhCN.management"><RouterLink to="/tasks">{{ zhCN.tasks }}</RouterLink><RouterLink to="/logs">{{ zhCN.logs }}</RouterLink><RouterLink to="/settings">{{ zhCN.settings }}</RouterLink></nav>
       <label class="compact-select">
         <span class="sr-only">{{ zhCN.theme }}</span>
         <select :value="props.theme" @change="emit('theme', ($event.target as HTMLSelectElement).value as ThemeMode)">

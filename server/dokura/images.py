@@ -158,13 +158,14 @@ class ImageRecord:
 
 
 class ImageService:
-    def __init__(self, engine, writer: WriteScheduler, content_dir: Path, cover_dir: Path) -> None:
+    def __init__(self, engine, writer: WriteScheduler, content_dir: Path, cover_dir: Path, operation_locks=None) -> None:
         self.engine = engine
         self.writer = writer
         self.content_dir = content_dir
         self.cover_dir = cover_dir
         self.scheduler = ImageScheduler()
         self.previews = PreviewCache()
+        self.operation_locks = operation_locks
 
     def page_record(self, file_id: str, page_number: int) -> ImageRecord | None:
         with Session(self.engine) as session:
@@ -265,10 +266,12 @@ class ImageService:
         except OSError as exc:
             raise TemporaryReadError(str(exc)) from exc
 
-    async def original_stream(self, record: ImageRecord, purpose: str, client_id: str, *, admitted: bool = False):
+    async def original_stream(self, record: ImageRecord, purpose: str, client_id: str, *, admitted: bool = False, operation_lock=None):
         if not admitted:
             await self.scheduler.acquire(purpose, client_id)
         try:
+            if operation_lock is None and self.operation_locks is not None:
+                operation_lock = await asyncio.to_thread(self.operation_locks.acquire, record.file_id, 5)
             archive = None
             source = None
             try:
@@ -288,6 +291,8 @@ class ImageService:
                 if archive is not None:
                     await asyncio.to_thread(archive.close)
         finally:
+            if operation_lock is not None:
+                operation_lock.release()
             await self.scheduler.release(purpose)
 
 

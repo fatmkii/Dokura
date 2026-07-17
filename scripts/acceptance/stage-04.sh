@@ -37,6 +37,6 @@ curl --fail --silent --show-error "http://127.0.0.1:$DOKURA_STAGE4_PORT/api/v1/h
 curl --fail --silent --show-error "http://127.0.0.1:$DOKURA_STAGE4_PORT/files/test-history-route" | grep -q '<div id="app"></div>'
 
 echo "[4/4] Playwright Chromium 阶段 4 浏览闭环"
-PW_BASE_URL="http://127.0.0.1:$DOKURA_STAGE4_PORT" npm --prefix "$ROOT/web" run e2e -- --reporter=list
+PW_BASE_URL="http://127.0.0.1:$DOKURA_STAGE4_PORT" npm --prefix "$ROOT/web" run e2e -- --grep-invert @stage5 --reporter=list
 
 echo "阶段 4 验收通过；Docker 数据与测试内容均位于已清理的临时目录"
