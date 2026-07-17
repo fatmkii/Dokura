@@ -1,0 +1,42 @@
+package com.dokura.app
+
+object UiText {
+    const val Catalog = "资料库"
+    const val Recent = "最近阅读"
+    const val Settings = "设置"
+    const val SearchHint = "搜索文件名"
+    const val Retry = "重试"
+    const val EmptyCatalog = "这里还没有内容"
+    const val EmptyRecent = "读过的内容会出现在这里"
+    const val Filters = "筛选与排序"
+    const val Save = "保存连接"
+    const val TestConnection = "测试连接"
+    const val ServerAddress = "服务端地址"
+    const val Port = "端口"
+    const val ApiKey = "APIkey"
+    const val Connection = "连接"
+    const val Appearance = "外观"
+    const val Reading = "浏览"
+    const val PreviewColumns = "详情预览列数"
+    const val CoverWidth = "列表封面宽度"
+    const val Theme = "主题"
+    const val SystemTheme = "跟随系统"
+    const val LightTheme = "亮色"
+    const val DarkTheme = "暗色"
+    const val NoCover = "无封面"
+    const val StartReading = "开始阅读"
+    const val Metadata = "文件信息"
+    const val ContentPreview = "内容预览"
+    const val Unrecognized = "未识别"
+    const val ListUpdated = "目录内容已更新，下拉刷新可重新加载"
+
+    fun statusLabel(code: String): String = when (code) {
+        "waiting_stable" -> "等待文件稳定"
+        "analyzing" -> "正在分析"
+        "ready" -> "可用"
+        "retry_wait" -> "等待重试"
+        "failed" -> "处理失败"
+        "no_valid_content" -> "无有效内容"
+        else -> "未知状态"
+    }
+}
