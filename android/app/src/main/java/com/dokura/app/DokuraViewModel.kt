@@ -16,6 +16,10 @@ import com.dokura.app.data.RatingBody
 import com.dokura.app.data.ReadingProgress
 import com.dokura.app.data.SettingsStore
 import com.dokura.app.data.ThemeMode
+import com.dokura.app.data.ReadingDirection
+import com.dokura.app.cache.ClearCacheResult
+import com.dokura.app.cache.ImageCache
+import com.dokura.app.reader.ReaderController
 import com.dokura.app.data.TagCandidateDto
 import com.dokura.app.network.ConnectionTestResult
 import com.dokura.app.network.NetworkClient
@@ -47,6 +51,7 @@ data class DetailUiState(
     val item: FileDetailDto? = null,
     val error: String? = null,
     val savingRating: Boolean = false,
+    val startPage: Int = 1,
 )
 
 data class DirectorySnapshot(val state: CatalogUiState, val firstVisibleItem: Int)
@@ -54,7 +59,13 @@ data class DirectorySnapshot(val state: CatalogUiState, val firstVisibleItem: In
 class DokuraViewModel(application: Application) : AndroidViewModel(application) {
     private val settingsStore = SettingsStore(application)
     private val credentials = CredentialStore(application)
-    private val progressDao = DokuraDatabase.create(application).readingProgress()
+    private val database = DokuraDatabase.create(application)
+    private val progressDao = database.readingProgress()
+    val imageCache = ImageCache(
+        application,
+        database.cache(),
+        limitBytes = { settings.value.cacheLimitGb * 1024L * 1024L * 1024L },
+    )
     private val connectivity = application.getSystemService(ConnectivityManager::class.java)
     private val _catalog = MutableStateFlow(CatalogUiState())
     private val _detail = MutableStateFlow(DetailUiState())
@@ -83,6 +94,9 @@ class DokuraViewModel(application: Application) : AndroidViewModel(application) 
     val detail = _detail.asStateFlow()
     val connectionTest = _connectionTest.asStateFlow()
     val tags = _tags.asStateFlow()
+    val cacheBytes = imageCache.totalBytes.stateIn(viewModelScope, SharingStarted.Eagerly, 0L)
+    val reader = ReaderController(application, viewModelScope, progressDao, imageCache, ::imageUrl, ::imageHeaders)
+    val readerState = reader.state
     val apiKeyConfigured: Boolean get() = credentials.readApiKey().isNotBlank()
 
     private val networkCallback = object : ConnectivityManager.NetworkCallback() {
@@ -94,9 +108,11 @@ class DokuraViewModel(application: Application) : AndroidViewModel(application) 
 
     init {
         connectivity.registerDefaultNetworkCallback(networkCallback)
+        viewModelScope.launch { imageCache.reconcile() }
     }
 
     override fun onCleared() {
+        reader.stop()
         connectivity.unregisterNetworkCallback(networkCallback)
         super.onCleared()
     }
@@ -116,6 +132,16 @@ class DokuraViewModel(application: Application) : AndroidViewModel(application) 
     fun setTheme(value: ThemeMode) = viewModelScope.launch { settingsStore.setTheme(value) }
     fun setPreviewColumns(value: Int) = viewModelScope.launch { settingsStore.setColumns(value) }
     fun setCoverWidth(value: Int) = viewModelScope.launch { settingsStore.setCoverWidth(value) }
+    fun setReadingDirection(value: ReadingDirection) = viewModelScope.launch { settingsStore.setReadingDirection(value) }
+    fun setKeepScreenOn(value: Boolean) = viewModelScope.launch { settingsStore.setKeepScreenOn(value) }
+    fun setCacheLimitGb(value: Int) = viewModelScope.launch {
+        settingsStore.setCacheLimitGb(value)
+        imageCache.enforceLimit(value * 1024L * 1024L * 1024L)
+    }
+    fun clearImageCache(onComplete: (ClearCacheResult) -> Unit) = viewModelScope.launch {
+        reader.prepareCacheClear()
+        onComplete(imageCache.clear())
+    }
 
     fun loadCatalog(reset: Boolean = false) {
         val current = _catalog.value
@@ -239,7 +265,10 @@ class DokuraViewModel(application: Application) : AndroidViewModel(application) 
         detailJob = viewModelScope.launch {
             _detail.value = DetailUiState(loading = true)
             runCatching { retryRead { requireApi().detail(id) } }
-                .onSuccess { _detail.value = DetailUiState(item = it) }
+                .onSuccess { item ->
+                    val saved = progressDao.get(id)?.page?.coerceIn(1, item.pageCount.coerceAtLeast(1)) ?: 1
+                    _detail.value = DetailUiState(item = item, startPage = saved)
+                }
                 .onFailure { error ->
                     if (shouldDeleteLocalState(error)) progressDao.delete(id)
                     _detail.value = DetailUiState(error = userMessage(error))
@@ -254,6 +283,17 @@ class DokuraViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun detailVisible() { detailVisible = true }
+
+    fun startReader(page: Int) {
+        _detail.value.item?.let { reader.start(it, page) }
+    }
+
+    fun stopReader() = reader.stop()
+    fun appBackgrounded() {
+        reader.onBackground()
+        viewModelScope.launch { imageCache.flushAccesses() }
+    }
+    fun onMemoryPressure() = reader.onMemoryPressure()
 
     fun setRating(value: Int) {
         val item = _detail.value.item ?: return

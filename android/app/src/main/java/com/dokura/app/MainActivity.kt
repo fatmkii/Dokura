@@ -25,6 +25,16 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent { DokuraApp(viewModel) }
     }
+
+    override fun onStop() {
+        viewModel.appBackgrounded()
+        super.onStop()
+    }
+
+    override fun onTrimMemory(level: Int) {
+        if (level >= TRIM_MEMORY_RUNNING_LOW) viewModel.onMemoryPressure()
+        super.onTrimMemory(level)
+    }
 }
 
 private val LightColors = lightColorScheme(

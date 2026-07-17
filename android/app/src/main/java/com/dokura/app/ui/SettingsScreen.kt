@@ -11,11 +11,13 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.Switch
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -33,15 +35,19 @@ import com.dokura.app.DokuraViewModel
 import com.dokura.app.UiText
 import com.dokura.app.data.ConnectionSettings
 import com.dokura.app.data.ThemeMode
+import com.dokura.app.data.ReadingDirection
 import com.dokura.app.network.ConnectionTestResult
 
 @Composable
 fun SettingsScreen(viewModel: DokuraViewModel) {
     val settings by viewModel.settings.collectAsState()
     val result by viewModel.connectionTest.collectAsState()
+    val cacheBytes by viewModel.cacheBytes.collectAsState()
     var address by remember { mutableStateOf("") }
     var port by remember { mutableStateOf("8000") }
     var apiKey by remember { mutableStateOf("") }
+    var confirmClear by remember { mutableStateOf(false) }
+    var cacheMessage by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(settings.connection) {
         address = settings.connection.address
         port = settings.connection.port.toString()
@@ -85,13 +91,49 @@ fun SettingsScreen(viewModel: DokuraViewModel) {
             )
         }
         SettingsSection(UiText.Reading) {
+            Text(UiText.ReadingDirection, fontWeight = FontWeight.Medium)
+            ChoiceRow(
+                listOf(ReadingDirection.LEFT_TO_RIGHT to UiText.LeftToRight, ReadingDirection.RIGHT_TO_LEFT to UiText.RightToLeft),
+                settings.readingDirection,
+                viewModel::setReadingDirection,
+            )
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(UiText.KeepScreenOn, Modifier.weight(1f))
+                Switch(settings.keepScreenOn, viewModel::setKeepScreenOn, Modifier.testTag("keepScreenOn"))
+            }
             Text(UiText.PreviewColumns, fontWeight = FontWeight.Medium)
             ChoiceRow(listOf(4 to "4 列", 5 to "5 列", 6 to "6 列"), settings.previewColumns, viewModel::setPreviewColumns)
             Text(UiText.CoverWidth, fontWeight = FontWeight.Medium)
             ChoiceRow(listOf(20 to "20%", 30 to "30%", 40 to "40%"), settings.coverWidthPercent, viewModel::setCoverWidth)
         }
+        SettingsSection(UiText.Cache) {
+            Text("当前用量：${readableCacheBytes(cacheBytes)}", fontWeight = FontWeight.Medium)
+            Text(UiText.CacheLimit)
+            ChoiceRow(listOf(1 to "1 GB", 5 to "5 GB", 10 to "10 GB", 20 to "20 GB"), settings.cacheLimitGb, viewModel::setCacheLimitGb)
+            Button(onClick = { confirmClear = true }) { Text(UiText.ClearCache) }
+            cacheMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+        }
         Text("Dokura 0.1.0 · API v1", color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall)
     }
+    if (confirmClear) AlertDialog(
+        onDismissRequest = { confirmClear = false },
+        title = { Text(UiText.ClearCache) },
+        text = { Text("将清除 ${readableCacheBytes(cacheBytes)} 的图片缓存，不影响连接、评分、进度和设置。") },
+        confirmButton = {
+            Button(onClick = {
+                confirmClear = false
+                viewModel.clearImageCache { result -> cacheMessage = "已释放 ${readableCacheBytes(result.releasedBytes)}，失败 ${result.failures} 项" }
+            }) { Text("确认清空") }
+        },
+        dismissButton = { TextButton(onClick = { confirmClear = false }) { Text("取消") } },
+    )
+}
+
+private fun readableCacheBytes(bytes: Long): String = when {
+    bytes >= 1024L * 1024 * 1024 -> "%.2f GB".format(bytes / (1024.0 * 1024 * 1024))
+    bytes >= 1024L * 1024 -> "%.1f MB".format(bytes / (1024.0 * 1024))
+    bytes >= 1024 -> "%.1f KB".format(bytes / 1024.0)
+    else -> "$bytes B"
 }
 
 @Composable

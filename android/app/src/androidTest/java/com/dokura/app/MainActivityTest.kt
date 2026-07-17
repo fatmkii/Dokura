@@ -16,9 +16,25 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import android.os.ParcelFileDescriptor
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.Text
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeLeft
+import androidx.compose.ui.test.click
+import com.dokura.app.data.ReadingDirection
+import com.dokura.app.reader.ReaderAction
+import com.dokura.app.ui.readerPageGestures
 import org.junit.Rule
 import org.junit.Before
 import org.junit.Test
+import org.junit.Assert.assertEquals
 import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
@@ -73,6 +89,46 @@ class MainActivityTest {
             shell("settings put system font_scale $original")
             composeRule.activityRule.scenario.recreate()
         }
+    }
+
+    @Test fun stageSevenReadingAndCacheSettingsPersistAcrossRotation() {
+        composeRule.onNodeWithText(UiText.Settings).performClick()
+        composeRule.onNodeWithTag("choice:${UiText.RightToLeft}").performScrollTo().performClick()
+        composeRule.onNodeWithTag("keepScreenOn").performScrollTo().performClick()
+        composeRule.onNodeWithTag("choice:10 GB").performScrollTo().performClick()
+        composeRule.activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+        composeRule.waitUntil(5_000) {
+            composeRule.onAllNodesWithText("• ${UiText.RightToLeft}").fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithText("• ${UiText.RightToLeft}").assertExists()
+        composeRule.onNodeWithText("• 10 GB").assertExists()
+    }
+
+    @Test fun readerGestureLayerUsesDirectionAndBlocksZoomedDragButKeepsEdgeTap() {
+        var action by mutableStateOf(ReaderAction.NONE)
+        var direction by mutableStateOf(ReadingDirection.LEFT_TO_RIGHT)
+        var zoom by mutableStateOf(1f)
+        composeRule.activity.setContent {
+            Box(
+                Modifier.fillMaxSize().testTag("gestureLayer")
+                    .readerPageGestures(1, direction, zoom, { action = it }),
+            ) { Text(action.name) }
+        }
+        composeRule.onNodeWithTag("gestureLayer").performTouchInput { swipeLeft() }
+        composeRule.runOnIdle { assertEquals(ReaderAction.NEXT, action) }
+
+        composeRule.runOnIdle { action = ReaderAction.NONE; zoom = 2f }
+        composeRule.onNodeWithTag("gestureLayer").performTouchInput { swipeLeft() }
+        composeRule.runOnIdle { assertEquals(ReaderAction.NONE, action) }
+
+        composeRule.onNodeWithTag("gestureLayer").performTouchInput { click(centerRight) }
+        composeRule.waitUntil(1_000) { action == ReaderAction.NEXT }
+        composeRule.runOnIdle { assertEquals(ReaderAction.NEXT, action) }
+
+        composeRule.runOnIdle { action = ReaderAction.NONE; direction = ReadingDirection.RIGHT_TO_LEFT }
+        composeRule.onNodeWithTag("gestureLayer").performTouchInput { click(centerLeft) }
+        composeRule.waitUntil(1_000) { action == ReaderAction.NEXT }
+        composeRule.runOnIdle { assertEquals(ReaderAction.NEXT, action) }
     }
 
     private fun shell(command: String) {

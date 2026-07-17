@@ -8,12 +8,16 @@ data class ConnectionSettings(
 )
 
 enum class ThemeMode { SYSTEM, LIGHT, DARK }
+enum class ReadingDirection { LEFT_TO_RIGHT, RIGHT_TO_LEFT }
 
 data class AppSettings(
     val connection: ConnectionSettings = ConnectionSettings(),
     val theme: ThemeMode = ThemeMode.SYSTEM,
     val previewColumns: Int = 4,
     val coverWidthPercent: Int = 30,
+    val readingDirection: ReadingDirection = ReadingDirection.LEFT_TO_RIGHT,
+    val keepScreenOn: Boolean = false,
+    val cacheLimitGb: Int = 5,
 )
 
 data class IdentityResponse(

@@ -49,6 +49,8 @@ import androidx.compose.ui.unit.dp
 import com.dokura.app.DokuraViewModel
 import com.dokura.app.UiText
 import com.dokura.app.data.CatalogItemDto
+import com.dokura.app.cache.ImageCache
+import com.dokura.app.data.CacheCategory
 import com.dokura.app.data.TagCandidateDto
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
@@ -109,6 +111,7 @@ fun CatalogScreen(viewModel: DokuraViewModel, openDetail: (String) -> Unit) {
                 onDirectory = { path -> viewModel.enterDirectory(path, listState.firstVisibleItemIndex) },
                 onFile = openDetail,
                 loadingMore = state.loadingMore,
+                cache = viewModel.imageCache,
             )
         }
     }
@@ -176,6 +179,7 @@ private fun CatalogList(
     onDirectory: (String) -> Unit,
     onFile: (String) -> Unit,
     loadingMore: Boolean,
+    cache: ImageCache,
 ) {
     LazyColumn(state = state, modifier = Modifier.fillMaxSize()) {
         items(items, key = { it.id ?: "directory:${it.relativePath}" }) { item ->
@@ -196,6 +200,10 @@ private fun CatalogList(
                         headers = headers,
                         description = item.name,
                         modifier = Modifier.width(width).aspectRatio(.72f),
+                        cache = cache,
+                        cacheKey = ImageCache.key(CacheCategory.COVER, requireNotNull(item.id)),
+                        category = CacheCategory.COVER,
+                        contentVersion = item.contentVersion,
                     )
                 }
                 Spacer(Modifier.width(14.dp))

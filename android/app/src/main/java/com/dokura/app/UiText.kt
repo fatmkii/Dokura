@@ -29,6 +29,16 @@ object UiText {
     const val ContentPreview = "内容预览"
     const val Unrecognized = "未识别"
     const val ListUpdated = "目录内容已更新，下拉刷新可重新加载"
+    const val Cache = "缓存"
+    const val CacheLimit = "缓存上限"
+    const val ClearCache = "清空缓存"
+    const val ReadingDirection = "阅读方向"
+    const val LeftToRight = "从左向右"
+    const val RightToLeft = "从右向左"
+    const val KeepScreenOn = "阅读时保持屏幕常亮"
+    const val PageUnavailable = "页面不可用"
+    const val ImageReadFailed = "图片读取失败"
+    const val BackToDetail = "返回详情"
 
     fun statusLabel(code: String): String = when (code) {
         "waiting_stable" -> "等待文件稳定"

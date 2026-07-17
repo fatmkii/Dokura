@@ -29,7 +29,7 @@ private val destinations = listOf(
 fun DokuraNavigation(viewModel: DokuraViewModel) {
     val controller = rememberNavController()
     val route = controller.currentBackStackEntryAsState().value?.destination?.route
-    val showBottom = route != "detail/{id}"
+    val showBottom = route != "detail/{id}" && route != "reader/{id}/{page}"
     Scaffold(
         bottomBar = {
             if (showBottom) NavigationBar {
@@ -67,7 +67,20 @@ fun DokuraNavigation(viewModel: DokuraViewModel) {
                         viewModel = viewModel,
                         id = requireNotNull(entry.arguments?.getString("id")),
                         onBack = { controller.popBackStack() },
+                        onRead = { page ->
+                            viewModel.startReader(page)
+                            controller.navigate("reader/${requireNotNull(entry.arguments?.getString("id"))}/$page")
+                        },
                     )
+                }
+                composable(
+                    "reader/{id}/{page}",
+                    arguments = listOf(
+                        navArgument("id") { type = NavType.StringType },
+                        navArgument("page") { type = NavType.IntType },
+                    ),
+                ) {
+                    ReaderScreen(viewModel) { controller.popBackStack() }
                 }
             }
         }

@@ -1,6 +1,7 @@
 package com.dokura.app.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -41,12 +42,14 @@ import androidx.compose.ui.unit.dp
 import com.dokura.app.DokuraViewModel
 import com.dokura.app.UiText
 import com.dokura.app.data.FileDetailDto
+import com.dokura.app.cache.ImageCache
+import com.dokura.app.data.CacheCategory
 import java.text.DateFormat
 import java.util.Date
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DetailScreen(viewModel: DokuraViewModel, id: String, onBack: () -> Unit) {
+fun DetailScreen(viewModel: DokuraViewModel, id: String, onBack: () -> Unit, onRead: (Int) -> Unit) {
     val state by viewModel.detail.collectAsState()
     val settings by viewModel.settings.collectAsState()
     LaunchedEffect(id) { viewModel.detailVisible(); viewModel.loadDetail(id) }
@@ -70,6 +73,9 @@ fun DetailScreen(viewModel: DokuraViewModel, id: String, onBack: () -> Unit) {
                     error = state.error,
                     onRating = viewModel::setRating,
                     onColumns = viewModel::setPreviewColumns,
+                    startPage = state.startPage,
+                    onRead = onRead,
+                    cache = viewModel.imageCache,
                 )
             }
         }
@@ -86,6 +92,9 @@ private fun DetailContent(
     error: String?,
     onRating: (Int) -> Unit,
     onColumns: (Int) -> Unit,
+    startPage: Int,
+    onRead: (Int) -> Unit,
+    cache: ImageCache,
 ) {
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val landscape = maxWidth > maxHeight
@@ -94,21 +103,21 @@ private fun DetailContent(
         if (landscape) {
             Row(Modifier.fillMaxSize()) {
                 Column(Modifier.width(containerWidth * .38f).verticalScroll(rememberScrollState()).padding(16.dp)) {
-                    Hero(item, headers, imageUrl, savingRating, error, onRating)
+                    Hero(item, headers, imageUrl, savingRating, error, onRating, startPage, onRead, cache)
                     Metadata(item)
                 }
                 val previewSize = previewTier(with(density) { ((containerWidth * .62f) / columns).toPx() })
-                PreviewGrid(item, columns, previewSize, headers, imageUrl, onColumns, Modifier.weight(1f))
+                PreviewGrid(item, columns, previewSize, headers, imageUrl, onColumns, Modifier.weight(1f), onRead, cache)
             }
         } else {
             val previewSize = previewTier(with(density) { (containerWidth / columns).toPx() })
             val gridState = rememberLazyGridState()
             LazyVerticalGrid(columns = GridCells.Fixed(columns), state = gridState, modifier = Modifier.fillMaxSize()) {
-                item(span = { GridItemSpan(maxLineSpan) }) { Hero(item, headers, imageUrl, savingRating, error, onRating) }
+                item(span = { GridItemSpan(maxLineSpan) }) { Hero(item, headers, imageUrl, savingRating, error, onRating, startPage, onRead, cache) }
                 item(span = { GridItemSpan(maxLineSpan) }) { Metadata(item) }
                 item(span = { GridItemSpan(maxLineSpan) }) { PreviewHeader(columns, onColumns) }
                 items(item.pages, key = { it.number }) { page ->
-                    PreviewCell(item, page, previewSize, headers, imageUrl)
+                    PreviewCell(item, page, previewSize, headers, imageUrl, onRead, cache)
                 }
             }
         }
@@ -123,6 +132,9 @@ private fun Hero(
     savingRating: Boolean,
     error: String?,
     onRating: (Int) -> Unit,
+    startPage: Int,
+    onRead: (Int) -> Unit,
+    cache: ImageCache,
 ) {
     Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.Top) {
         RemoteImage(
@@ -130,6 +142,10 @@ private fun Hero(
             headers = headers,
             description = item.name,
             modifier = Modifier.fillMaxWidth(.4f).aspectRatio(.72f),
+            cache = cache,
+            cacheKey = ImageCache.key(CacheCategory.COVER, item.id),
+            category = CacheCategory.COVER,
+            contentVersion = item.contentVersion,
         )
         Spacer(Modifier.width(16.dp))
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -142,7 +158,7 @@ private fun Hero(
                     }
                 }
             }
-            Button(onClick = {}, enabled = false) { Text(UiText.StartReading) }
+            Button(onClick = { onRead(startPage) }) { Text("从第 ${startPage} 页开始浏览") }
             if (error != null) Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
         }
     }
@@ -180,12 +196,14 @@ private fun PreviewGrid(
     imageUrl: (String) -> String?,
     onColumns: (Int) -> Unit,
     modifier: Modifier,
+    onRead: (Int) -> Unit = {},
+    cache: ImageCache,
 ) {
     Column(modifier.padding(12.dp)) {
         PreviewHeader(columns, onColumns)
         LazyVerticalGrid(columns = GridCells.Fixed(columns), modifier = Modifier.weight(1f), userScrollEnabled = true) {
             items(item.pages, key = { it.number }) { page ->
-                PreviewCell(item, page, previewSize, headers, imageUrl)
+                PreviewCell(item, page, previewSize, headers, imageUrl, onRead, cache)
             }
         }
     }
@@ -208,8 +226,10 @@ private fun PreviewCell(
     previewSize: Int,
     headers: Map<String, String>,
     imageUrl: (String) -> String?,
+    onRead: (Int) -> Unit,
+    cache: ImageCache,
 ) {
-    Column(Modifier.padding(3.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(Modifier.padding(3.dp).clickable { onRead(page.number) }, horizontalAlignment = Alignment.CenterHorizontally) {
         if (page.unavailable) {
             Box(Modifier.fillMaxWidth().aspectRatio(.72f), contentAlignment = Alignment.Center) { Text("页面不可用", style = MaterialTheme.typography.labelSmall) }
         } else {
@@ -218,6 +238,10 @@ private fun PreviewCell(
                 headers = headers,
                 description = "第 ${page.number} 页",
                 modifier = Modifier.fillMaxWidth().aspectRatio(.72f),
+                cache = cache,
+                cacheKey = ImageCache.key(CacheCategory.PREVIEW, item.id, page.number, previewSize),
+                category = CacheCategory.PREVIEW,
+                contentVersion = item.contentVersion,
             )
         }
         Text("${page.number}", style = MaterialTheme.typography.labelSmall)
