@@ -18,7 +18,7 @@ from dokura.metadata.cache_cleanup import CacheCleanupManager
 from dokura.metadata.database import WriteScheduler, create_database_engine
 from dokura.metadata.migrations import upgrade_database
 from dokura.metadata.models import AnalysisStatus, File, FileTag, Tag, Task
-from dokura.metadata.scanning import ScanCoordinator
+from dokura.metadata.scanning import ScanCoordinator, _cover_is_missing
 from dokura.metadata.tasks import ForegroundPressure, TaskScheduler
 from dokura.metadata.watcher import EventWindow
 from watchfiles import Change
@@ -88,6 +88,36 @@ def test_scan_filters_entries_and_analyzes_after_three_stable_checks(stage2) -> 
         task = session.scalar(select(Task))
         assert record is not None and record.status == AnalysisStatus.READY
         assert task is not None and task.status == "completed"
+
+
+def test_scan_recreates_cover_omitted_from_cold_backup(stage2) -> None:
+    content, metadata, engine, _writer, tasks, scans = stage2
+    _write_zip(content / "book.zip")
+    scans.scan_once()
+    _analyze_pending(engine, tasks)
+    with Session(engine) as session:
+        record = session.scalar(select(File))
+        cover = metadata / record.cover_path
+        original_id = record.id
+    cover.unlink()
+
+    assert scans.scan_once().changes_found == 1
+    _analyze_pending(engine, tasks)
+
+    with Session(engine) as session:
+        restored = session.get(File, original_id)
+        assert restored.status == AnalysisStatus.READY
+        assert (metadata / restored.cover_path).is_file()
+
+
+def test_cover_recovery_never_probes_outside_metadata(tmp_path: Path) -> None:
+    covers = tmp_path / "metadata" / "covers"
+    covers.mkdir(parents=True)
+    outside = tmp_path / "secret"
+    outside.write_text("not a cover", encoding="utf-8")
+
+    assert _cover_is_missing(covers, "../../secret") is True
+    assert _cover_is_missing(covers, str(outside)) is True
 
 
 def test_identity_rules_preserve_move_and_update_but_not_replacement(stage2) -> None:

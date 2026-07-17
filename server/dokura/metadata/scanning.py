@@ -26,6 +26,13 @@ logger = logging.getLogger(__name__)
 BATCH_SIZE = 200
 
 
+def _cover_is_missing(cover_root: Path, relative_path: str) -> bool:
+    path = PurePosixPath(relative_path)
+    if path.is_absolute() or ".." in path.parts or not path.parts or path.parts[0] != "covers":
+        return True
+    return not (cover_root.parent / path).is_file()
+
+
 @dataclass(frozen=True, slots=True)
 class DiscoveredFile:
     relative_path: str
@@ -203,9 +210,17 @@ class ScanCoordinator:
             or_(File.relative_path.in_(paths), or_(*identity_filters)),
         )
         with Session(self.engine) as read_session:
+            candidates = list(read_session.scalars(select(File).where(*record_filter)))
             candidate_paths = {
                 record.id: record.relative_path
-                for record in read_session.scalars(select(File).where(*record_filter))
+                for record in candidates
+            }
+            missing_cover_ids = {
+                record.id for record in candidates
+                if record.status == AnalysisStatus.READY
+                and record.cover_status == CoverStatus.COMPLETE
+                and record.cover_path
+                and _cover_is_missing(self.tasks.cover_dir, record.cover_path)
             }
         missing_candidate_ids = {
             record_id for record_id, relative_path in candidate_paths.items()
@@ -279,6 +294,16 @@ class ScanCoordinator:
                     parsed = parse_filename(Path(item.relative_path).name)
                     _apply_identity_and_parse(record, snapshot, item.relative_path, parsed)
                     _replace_tags(session, record, parsed)
+                    changed += 1
+                elif record.id in missing_cover_ids:
+                    # Covers are disposable cache data and may be omitted from a
+                    # cold backup. Re-analyze the unchanged ZIP to recreate it.
+                    record.cover_status = CoverStatus.NOT_GENERATED
+                    record.cover_path = None
+                    self._enqueue(
+                        session, record, item.relative_path, reset_retries=False,
+                        task=active_by_file.get(record.id),
+                    )
                     changed += 1
         return changed
 
