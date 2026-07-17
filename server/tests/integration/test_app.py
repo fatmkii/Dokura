@@ -38,6 +38,20 @@ def test_missing_route_uses_unified_error(settings) -> None:
     }
 
 
+def test_web_history_routes_serve_the_application_shell(settings, tmp_path) -> None:
+    web_dist = tmp_path / "web"
+    web_dist.mkdir()
+    (web_dist / "index.html").write_text("<main>Dokura shell</main>", encoding="utf-8")
+    with TestClient(create_app(settings=settings, sqlite_check=passing_sqlite_check, web_dist=web_dist)) as client:
+        response = client.get("/files/01234567-89ab-cdef-0123-456789abcdef")
+        reader = client.get("/reader/01234567-89ab-cdef-0123-456789abcdef/2")
+        missing_api = client.get("/api/v1/not-real")
+    assert response.status_code == 200
+    assert "Dokura shell" in response.text
+    assert reader.status_code == 200
+    assert missing_api.status_code == 404
+
+
 def test_startup_rejects_failed_sqlite_check(settings) -> None:
     def failing_check():
         raise RuntimeError("SQLite 运行时版本不满足要求")

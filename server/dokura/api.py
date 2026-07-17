@@ -135,6 +135,11 @@ def install_stage3_api(app: FastAPI) -> None:
         result = await asyncio.to_thread(file_detail, app.state.database_engine, file_id)
         if result is None:
             raise HTTPException(status_code=404, detail="文件不存在")
+        cover_record = await asyncio.to_thread(images.cover_record, file_id)
+        try:
+            result["cover_cache_bytes"] = cover_record[0].stat().st_size if cover_record else 0
+        except OSError:
+            result["cover_cache_bytes"] = 0
         return result
 
     @app.put("/api/v1/files/{file_id}/rating", tags=["目录与文件"], dependencies=[Depends(require_read_access)])

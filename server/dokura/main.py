@@ -180,6 +180,14 @@ def create_app(
         async def web_index() -> FileResponse:
             return FileResponse(static_dir / "index.html")
 
+        @app.get("/{web_path:path}", include_in_schema=False)
+        async def web_route(web_path: str) -> FileResponse:
+            # Vue Router owns non-API browser routes. API typos must retain the
+            # unified JSON 404 instead of receiving the HTML application shell.
+            if web_path == "api" or web_path.startswith("api/"):
+                raise HTTPException(status_code=404)
+            return FileResponse(static_dir / "index.html")
+
     return app
 
 
