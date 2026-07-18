@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import io
 import os
 import threading
@@ -14,10 +15,13 @@ from PIL import Image
 from sqlalchemy import event, select
 from sqlalchemy.orm import Session
 
+from dokura.images import ImageService
+from dokura.metadata.analysis_service import FileSnapshot, prepare_analysis
 from dokura.metadata.cache_cleanup import CacheCleanupManager
 from dokura.metadata.database import WriteScheduler, create_database_engine
 from dokura.metadata.migrations import upgrade_database
 from dokura.metadata.models import AnalysisStatus, File, FileTag, Tag, Task
+from dokura.metadata.repository import commit_analysis
 from dokura.metadata.scanning import ScanCoordinator, _cover_is_missing
 from dokura.metadata.tasks import ForegroundPressure, TaskScheduler
 from dokura.metadata.watcher import EventWindow
@@ -160,6 +164,42 @@ def test_identity_rules_preserve_move_and_update_but_not_replacement(stage2) -> 
         assert old.present is False
         assert new.id != original_id
         assert new.rating == 0
+
+
+def test_scan_refreshes_mount_device_without_reanalyzing(stage2) -> None:
+    content, metadata, engine, writer, _tasks, scans = stage2
+    archive = content / "book.zip"
+    _write_zip(archive)
+    commit_analysis(prepare_analysis(archive, metadata / "covers"), "book.zip", metadata / "covers", writer)
+    snapshot = FileSnapshot.read(archive)
+
+    with writer.transaction() as session:
+        record = session.scalar(select(File).where(File.present.is_(True)))
+        file_id = record.id
+        page_count = len(record.pages)
+        record.device = snapshot.device + 1
+        legacy = f"{record.device}:{snapshot.inode}:{snapshot.size}:{snapshot.modified_ns}".encode()
+        record.content_version = hashlib.sha256(legacy).hexdigest()[:32]
+
+    outcome = scans.scan_once()
+    assert outcome.changes_found == 1
+
+    with Session(engine) as session:
+        record = session.get(File, file_id)
+        assert record.device == snapshot.device
+        assert record.content_version == snapshot.content_version
+        assert len(record.pages) == page_count
+        assert session.scalar(select(Task).where(Task.file_id == file_id, Task.status == "waiting_stable")) is None
+
+    images = ImageService(engine, writer, content, metadata / "covers")
+    assert images.page_record(file_id, 1) is not None
+
+
+def test_content_version_is_independent_of_mount_device() -> None:
+    first = FileSnapshot(1, 2, 3, 4)
+    second = FileSnapshot(99, 2, 3, 4)
+
+    assert first.content_version == second.content_version
 
 
 def test_inaccessible_subtree_and_root_never_confirm_deletion(stage2, monkeypatch: pytest.MonkeyPatch) -> None:

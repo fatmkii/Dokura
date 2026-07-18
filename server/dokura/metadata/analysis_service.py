@@ -28,7 +28,7 @@ class FileSnapshot:
 
     @property
     def content_version(self) -> str:
-        raw = f"{self.device}:{self.inode}:{self.size}:{self.modified_ns}".encode()
+        raw = f"{self.inode}:{self.size}:{self.modified_ns}".encode()
         return hashlib.sha256(raw).hexdigest()[:32]
 
 

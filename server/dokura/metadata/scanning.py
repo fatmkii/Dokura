@@ -305,6 +305,10 @@ class ScanCoordinator:
                         task=active_by_file.get(record.id),
                     )
                     changed += 1
+                elif record.device != snapshot.device or record.content_version != snapshot.content_version:
+                    record.device = snapshot.device
+                    record.content_version = snapshot.content_version
+                    changed += 1
         return changed
 
     def _reconcile_directories(
