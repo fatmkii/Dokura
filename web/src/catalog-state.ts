@@ -8,7 +8,7 @@ const defaults: CatalogState = {
   query: "",
   scope: "current",
   tagIds: [],
-  tagMode: "all",
+  tagMode: "grouped",
   ratingMin: 0,
   ratingMax: 5,
   sort: "name",
@@ -41,7 +41,7 @@ export function parseCatalogState(query: LocationQuery): CatalogState {
     query: one(query.q) ?? defaults.query,
     scope: scopeValue === "recursive" ? "recursive" : "current",
     tagIds: [...new Set(tagValues.map(Number).filter((id) => Number.isInteger(id) && id > 0))],
-    tagMode: tagModeValue === "any" ? "any" : "all",
+    tagMode: tagModeValue === "all" || tagModeValue === "any" ? tagModeValue : "grouped",
     ratingMin: ratingMin <= ratingMax ? ratingMin : defaults.ratingMin,
     ratingMax: ratingMin <= ratingMax ? ratingMax : defaults.ratingMax,
     sort: (["name", "size", "modified", "rating"] as string[]).includes(sortValue ?? "")

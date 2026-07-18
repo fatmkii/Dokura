@@ -117,7 +117,7 @@ def install_stage3_api(app: FastAPI) -> None:
         per_page: int = Query(50, ge=1, le=200), query: str = "",
         scope: Literal["current", "recursive"] = "current",
         tag_id: Annotated[list[int] | None, Query()] = None,
-        tag_mode: Literal["all", "any"] = "all", rating_min: int = Query(0, ge=0, le=5),
+        tag_mode: Literal["all", "any", "grouped"] = "all", rating_min: int = Query(0, ge=0, le=5),
         rating_max: int = Query(5, ge=0, le=5),
         sort: Literal["name", "size", "modified", "rating"] = "name",
         direction: Literal["asc", "desc"] = "asc",
@@ -128,8 +128,14 @@ def install_stage3_api(app: FastAPI) -> None:
         return await asyncio.to_thread(list_catalog, app.state.database_engine, options)
 
     @app.get("/api/v1/tags", tags=["目录与文件"], dependencies=[Depends(require_read_access)])
-    async def tags(request: Request, path: str = "", scope: Literal["current", "recursive"] = "current", query: str = "") -> dict[str, object]:
-        items = await asyncio.to_thread(tag_candidates, app.state.database_engine, path=_path(path), scope=scope, keyword=query)
+    async def tags(
+        request: Request, path: str = "", scope: Literal["current", "recursive"] = "current",
+        query: str = "", category: Annotated[list[Literal["source", "artist", "language"]] | None, Query()] = None,
+    ) -> dict[str, object]:
+        items = await asyncio.to_thread(
+            tag_candidates, app.state.database_engine, path=_path(path), scope=scope,
+            keyword=query, categories=tuple(category or ()),
+        )
         return {"items": items}
 
     @app.get("/api/v1/files/{file_id}", tags=["目录与文件"], dependencies=[Depends(require_read_access)])

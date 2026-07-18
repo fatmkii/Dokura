@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { useMessage } from "naive-ui";
+import { NSelect, useMessage, type SelectOption } from "naive-ui";
 import { useRoute, useRouter } from "vue-router";
 
 import { api, ApiError, coverUrl } from "../api";
@@ -28,6 +28,7 @@ const snapshot = ref<{ id: string; count: number }>();
 const managing = ref(false);
 let requestController: AbortController | undefined;
 let searchTimer: ReturnType<typeof setTimeout> | undefined;
+let loadedTagScope = "";
 
 const breadcrumbs = computed(() => {
   const parts = state.value.path ? state.value.path.split("/") : [];
@@ -38,6 +39,31 @@ const directories = computed(() => result.value?.items.filter((item) => item.kin
 const files = computed(() => result.value?.items.filter((item) => item.kind === "file") ?? []);
 const allPageSelected = computed(() => files.value.length > 0 && files.value.every((item) => selected.value.has(item.id)));
 const selectedCount = computed(() => snapshot.value?.count ?? selected.value.size);
+const tagOptions = computed<Record<"source" | "artist" | "language", SelectOption[]>>(() => ({
+  source: optionsFor("source"),
+  artist: optionsFor("artist"),
+  language: optionsFor("language"),
+}));
+const selectedTagIds = computed<Record<"source" | "artist" | "language", number[]>>(() => ({
+  source: selectedFor("source"),
+  artist: selectedFor("artist"),
+  language: selectedFor("language"),
+}));
+
+function optionsFor(category: string): SelectOption[] {
+  return tags.value
+    .filter((tag) => tag.category === category)
+    .map((tag) => ({ label: tag.uses == null ? tag.value : `${tag.value} (${tag.uses})`, value: tag.id }));
+}
+
+function selectedFor(category: string): number[] {
+  const ids = new Set(tags.value.filter((tag) => tag.category === category).map((tag) => tag.id));
+  return state.value.tagIds.filter((id) => ids.has(id));
+}
+
+function filterTagOption(pattern: string, option: SelectOption): boolean {
+  return String(option.label ?? "").toLocaleLowerCase().includes(pattern.toLocaleLowerCase());
+}
 
 function dismissDefaultPassword(): void {
   sessionStorage.removeItem("dokura-default-password");
@@ -50,14 +76,19 @@ async function load(): Promise<void> {
   loading.value = true;
   error.value = "";
   try {
+    const tagScope = `${state.value.path}\u0000${state.value.scope}`;
+    const tagRequest = loadedTagScope === tagScope
+      ? Promise.resolve({ items: tags.value })
+      : api.tags(state.value.path, state.value.scope, requestController.signal);
     const [catalog, tagResult] = await Promise.all([
       api.catalog(state.value, requestController.signal),
-      api.tags(state.value.path, state.value.scope, requestController.signal),
+      tagRequest,
     ]);
     if (previousVersion.value && previousVersion.value !== catalog.result_version) versionChanged.value = true;
     previousVersion.value = catalog.result_version;
     result.value = catalog;
     tags.value = tagResult.items;
+    loadedTagScope = tagScope;
   } catch (reason) {
     if ((reason as Error).name !== "AbortError") {
       if (reason instanceof ApiError && reason.status === 401) {
@@ -87,11 +118,11 @@ function openDirectory(path: string): void {
   replaceState({ path, page: 1 }, false);
 }
 
-function toggleTag(id: number): void {
-  const selected = state.value.tagIds.includes(id)
-    ? state.value.tagIds.filter((value) => value !== id)
-    : [...state.value.tagIds, id];
-  replaceState({ tagIds: selected });
+function setTagCategory(category: string, values: Array<string | number>): void {
+  const categoryIds = new Set(tags.value.filter((tag) => tag.category === category).map((tag) => tag.id));
+  const otherIds = state.value.tagIds.filter((id) => !categoryIds.has(id));
+  const selected = values.map(Number).filter((id) => Number.isInteger(id) && id > 0);
+  replaceState({ tagIds: [...new Set([...otherIds, ...selected])] });
 }
 
 async function updateRating(item: FileItem, rating: number): Promise<void> {
@@ -271,10 +302,16 @@ onBeforeUnmount(() => {
 
     <section class="filter-strip" :aria-label="zhCN.filterConditions">
       <span class="filter-label">{{ zhCN.filter }} <b>{{ activeFilterCount }}</b></span>
-      <div class="tag-options">
-        <button v-for="tag in tags" :key="tag.id" type="button" :class="{ selected: state.tagIds.includes(tag.id) }" :aria-pressed="state.tagIds.includes(tag.id)" @click="toggleTag(tag.id)">
-          {{ tag.category }}:{{ tag.value }} <small>{{ tag.uses }}</small>
-        </button>
+      <div class="tag-selects">
+        <label class="tag-select-field"><span>来源</span>
+          <NSelect :value="selectedTagIds.source" :options="tagOptions.source" multiple filterable clearable :filter="filterTagOption" :max-tag-count="1" placeholder="选择来源" @update:value="setTagCategory('source', $event)" />
+        </label>
+        <label class="tag-select-field"><span>作者</span>
+          <NSelect :value="selectedTagIds.artist" :options="tagOptions.artist" multiple filterable clearable :filter="filterTagOption" :max-tag-count="1" placeholder="选择作者" @update:value="setTagCategory('artist', $event)" />
+        </label>
+        <label class="tag-select-field"><span>语言</span>
+          <NSelect :value="selectedTagIds.language" :options="tagOptions.language" multiple filterable clearable :filter="filterTagOption" :max-tag-count="1" placeholder="选择语言" @update:value="setTagCategory('language', $event)" />
+        </label>
       </div>
       <div class="rating-filter">
         <label>{{ zhCN.minimum }} <select :value="state.ratingMin" @change="setRatingMin(Number(($event.target as HTMLSelectElement).value))"><option v-for="n in 6" :key="n - 1" :value="n - 1">{{ n - 1 }}</option></select></label>

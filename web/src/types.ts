@@ -81,7 +81,7 @@ export interface CatalogState {
   query: string;
   scope: CatalogScope;
   tagIds: number[];
-  tagMode: "all" | "any";
+  tagMode: "all" | "any" | "grouped";
   ratingMin: number;
   ratingMax: number;
   sort: SortKey;

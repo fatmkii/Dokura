@@ -61,6 +61,7 @@ export const api = {
   },
   tags(path: string, scope: string, signal?: AbortSignal) {
     const query = new URLSearchParams({ path, scope });
+    for (const category of ["source", "artist", "language"]) query.append("category", category);
     return request<{ items: Tag[] }>(`/api/v1/tags?${query}`, { signal });
   },
   detail: (id: string, signal?: AbortSignal) => request<FileDetail>(`/api/v1/files/${encodeURIComponent(id)}`, { signal }),

@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import PurePosixPath
 
 from sqlalchemy import and_, asc, column, desc, func, or_, select, text
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session, aliased, selectinload
 
 from dokura.metadata.models import Directory, File, FileTag, Page, Scan, Tag
 from dokura.metadata.natural_sort import normalized_casefold
@@ -73,6 +73,22 @@ def _file_filters(query: CatalogQuery):
         )
         if query.tag_mode == "all":
             matched = matched.having(func.count(func.distinct(FileTag.tag_id)) == len(set(query.tag_ids)))
+        elif query.tag_mode == "grouped":
+            matched = matched.join(Tag, Tag.id == FileTag.tag_id)
+            selected_tag = aliased(Tag)
+            selected_ids = set(query.tag_ids)
+            selected_category_count = (
+                select(func.count(func.distinct(selected_tag.category)))
+                .where(selected_tag.id.in_(query.tag_ids))
+                .scalar_subquery()
+            )
+            selected_tag_count = (
+                select(func.count(selected_tag.id))
+                .where(selected_tag.id.in_(query.tag_ids))
+                .scalar_subquery()
+            )
+            filters.append(selected_tag_count == len(selected_ids))
+            matched = matched.having(func.count(func.distinct(Tag.category)) == selected_category_count)
         filters.append(File.id.in_(matched))
     return filters, params
 
@@ -177,27 +193,26 @@ def matching_file_ids(engine, query: CatalogQuery) -> list[str]:
         return list(session.scalars(select(File.id).where(*filters).order_by(File.id), params))
 
 
-def tag_candidates(engine, *, path: str, scope: str, keyword: str = "") -> list[dict[str, object]]:
+def tag_candidates(
+    engine, *, path: str, scope: str, keyword: str = "", categories: tuple[str, ...] = (),
+) -> list[dict[str, object]]:
     folded = normalized_casefold(keyword.strip())
     with Session(engine) as session:
         statement = (
-            select(Tag.id, Tag.category, Tag.value, func.count(func.distinct(File.id)).label("uses"))
+            select(Tag.id, Tag.category, Tag.value, func.count(FileTag.file_id).label("uses"))
             .join(FileTag, FileTag.tag_id == Tag.id)
             .join(File, File.id == FileTag.file_id)
             .where(File.present.is_(True), File.storage_unavailable.is_(False), _scope_filter(File.parent_path, path, scope))
         )
+        if categories:
+            statement = statement.where(Tag.category.in_(categories))
         if folded:
             statement = statement.where(Tag.value_casefold.contains(folded, autoescape=True))
         rows = session.execute(statement.group_by(Tag.id).order_by(Tag.category, desc("uses"), Tag.value_casefold)).all()
-    limits: dict[str, int] = {}
-    maximum = 50 if folded else 20
-    result = []
-    for tag_id, category, value, uses in rows:
-        if limits.get(category, 0) >= maximum:
-            continue
-        limits[category] = limits.get(category, 0) + 1
-        result.append({"id": tag_id, "category": category, "value": value, "count": uses})
-    return result
+    return [
+        {"id": tag_id, "category": category, "value": value, "uses": uses}
+        for tag_id, category, value, uses in rows
+    ]
 
 
 def file_detail(engine, file_id: str) -> dict[str, object] | None:

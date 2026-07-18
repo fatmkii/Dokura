@@ -16,7 +16,7 @@ class SelectionInput(BaseModel):
     query: str = ""
     scope: Literal["current", "recursive"] = "current"
     tag_ids: list[int] = Field(default_factory=list)
-    tag_mode: Literal["all", "any"] = "all"
+    tag_mode: Literal["all", "any", "grouped"] = "all"
     rating_min: int = Field(0, ge=0, le=5)
     rating_max: int = Field(5, ge=0, le=5)
     sort: Literal["name", "size", "modified", "rating"] = "name"

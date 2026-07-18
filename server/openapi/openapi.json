@@ -257,7 +257,8 @@
             "default": "all",
             "enum": [
               "all",
-              "any"
+              "any",
+              "grouped"
             ],
             "title": "Tag Mode",
             "type": "string"
@@ -1485,7 +1486,8 @@
               "default": "all",
               "enum": [
                 "all",
-                "any"
+                "any",
+                "grouped"
               ],
               "title": "Tag Mode",
               "type": "string"
@@ -1979,6 +1981,30 @@
               "default": "",
               "title": "Query",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "category",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "enum": [
+                      "source",
+                      "artist",
+                      "language"
+                    ],
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Category"
             }
           }
         ],

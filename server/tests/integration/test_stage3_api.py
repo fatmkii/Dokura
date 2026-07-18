@@ -85,6 +85,15 @@ def seed(app, settings, name: str, *, rating: int, tag_value: str, color: str) -
     return file_id, page_bytes
 
 
+def add_tag(app, file_ids: list[str], category: str, value: str) -> int:
+    with app.state.writer.transaction() as session:
+        tag = Tag(category=category, value=value, value_casefold=normalized_casefold(value))
+        session.add(tag)
+        session.flush()
+        session.add_all(FileTag(file_id=file_id, tag_id=tag.id) for file_id in file_ids)
+        return tag.id
+
+
 def test_auth_permissions_rotation_and_password_lifecycle(settings, caplog) -> None:
     app = create_app(settings=settings, sqlite_check=passing_sqlite_check)
     with TestClient(app) as client:
@@ -146,16 +155,26 @@ def test_catalog_search_filters_pagination_rating_and_query_plans(settings) -> N
         login(client)
         wait_for_scan(client)
         first_id, _ = seed(app, settings, "Café 2.zip", rating=0, tag_value="作者甲", color="red")
-        seed(app, settings, "CAFÉ 10.zip", rating=4, tag_value="作者甲", color="green")
-        seed(app, settings, "别册 3.zip", rating=5, tag_value="作者乙", color="blue")
+        second_id, _ = seed(app, settings, "CAFÉ 10.zip", rating=4, tag_value="作者甲", color="green")
+        third_id, _ = seed(app, settings, "别册 3.zip", rating=5, tag_value="作者乙", color="blue")
+        source_x = add_tag(app, [first_id, second_id], "source", "来源甲")
+        add_tag(app, [third_id], "source", "来源乙")
 
         one = client.get("/api/v1/catalog", params={"path": "子目录", "query": "é"}).json()
         trigram = client.get("/api/v1/catalog", params={"path": "子目录", "query": "CAFE\u0301"}).json()
         assert one["total"] == trigram["total"] == 2
         assert [item["name"] for item in trigram["items"]] == ["Café 2.zip", "CAFÉ 10.zip"]
 
-        candidates = client.get("/api/v1/tags", params={"path": "子目录"}).json()["items"]
+        candidates = client.get("/api/v1/tags", params=[("path", "子目录"), ("category", "artist"), ("category", "source")]).json()["items"]
+        assert {item["category"] for item in candidates} == {"artist", "source"}
+        assert all("uses" in item for item in candidates)
         author = next(item for item in candidates if item["value"] == "作者甲")
+        other_author = next(item for item in candidates if item["value"] == "作者乙")
+        grouped = client.get("/api/v1/catalog", params={
+            "path": "子目录", "tag_id": [author["id"], other_author["id"], source_x],
+            "tag_mode": "grouped",
+        }).json()
+        assert {item["id"] for item in grouped["items"]} == {first_id, second_id}
         filtered = client.get("/api/v1/catalog", params={
             "path": "子目录", "tag_id": author["id"], "rating_min": 0,
             "rating_max": 4, "sort": "rating", "direction": "desc", "per_page": 1,

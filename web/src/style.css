@@ -127,10 +127,18 @@ a { color: inherit; }
 .filter-strip { display: flex; align-items: center; gap: 14px; min-height: 58px; padding: 10px 14px; border: solid var(--line); border-width: 0 1px 1px; background: color-mix(in srgb, var(--surface) 60%, transparent); }
 .filter-label { flex: 0 0 auto; color: var(--muted); font-size: 16px; }
 .filter-label b { display: inline-grid; width: 18px; height: 18px; margin-left: 4px; place-items: center; border-radius: 50%; background: var(--forest-soft); color: var(--forest); font-size: 16px; }
-.tag-options { flex: 1; display: flex; gap: 7px; overflow-x: auto; scrollbar-width: thin; }
-.tag-options button { flex: 0 0 auto; padding: 5px 9px; border: 1px solid var(--line); border-radius: 20px; background: transparent; color: var(--muted); font-size: 16px; cursor: pointer; }
-.tag-options button.selected { border-color: var(--forest); background: var(--forest-soft); color: var(--forest); }
-.tag-options small { margin-left: 4px; opacity: .65; }
+.tag-selects { flex: 1 1 720px; display: grid; grid-template-columns: repeat(3, minmax(180px, 1fr)); gap: 10px; }
+.tag-select-field { min-width: 0; display: grid; gap: 5px; color: var(--faint); font-size: 16px; }
+.tag-select-field .n-base-selection, .tag-select-field .n-base-selection-label, .tag-select-field .n-base-selection-tags { height: 42px; min-height: 42px; }
+.tag-select-field .n-base-selection-tags { flex-wrap: nowrap; overflow: hidden; }
+.tag-select-field .n-base-selection-tag-wrapper { min-width: 0; max-width: 100%; }
+.tag-select-field .n-base-selection-tag-wrapper:first-child { flex: 1 1 auto; overflow: hidden; }
+.tag-select-field .n-base-selection-tag-wrapper:first-child .n-tag { width: 100%; }
+.tag-select-field .n-base-selection-tag-wrapper + .n-base-selection-tag-wrapper { flex: 0 0 auto; }
+.tag-select-field .n-tag { min-width: 0; max-width: 100%; }
+.tag-select-field .n-tag__content { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tag-select-field .n-base-selection-input, .tag-select-field .n-tag { font-size: 16px; }
+.n-base-select-menu .n-base-select-option { font-size: 16px; }
 .rating-filter { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
 .rating-filter label { color: var(--faint); font-size: 16px; }
 .clear-button { flex: 0 0 auto; border: 0; border-bottom: 1px solid currentColor; background: transparent; color: var(--danger); font-size: 16px; cursor: pointer; }
@@ -320,7 +328,7 @@ a { color: inherit; }
   .search-field { grid-column: 1 / -1; }
   .tool-field { min-width: 0; }
   .filter-strip { align-items: flex-start; flex-wrap: wrap; }
-  .tag-options { order: 4; flex-basis: 100%; }
+  .tag-selects { flex-basis: 100%; grid-template-columns: 1fr; }
   .directory-row { grid-template-columns: 1fr auto; min-height: 76px; padding: 12px 8px; }
   .directory-open { grid-template-columns: 44px 1fr; }
   .row-management button:not(.danger-link) { display: none; }

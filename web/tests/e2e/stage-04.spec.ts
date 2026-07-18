@@ -52,6 +52,7 @@ interface MockOptions {
   missingDetail?: boolean;
   ratingFailure?: boolean;
   catalogRequests?: string[];
+  tagRequests?: string[];
   previewRequests?: number[];
   originalRequests?: number[];
 }
@@ -82,7 +83,10 @@ async function mockApi(page: Page, options: MockOptions = {}): Promise<void> {
         result_version: "test-v1",
       });
     }
-    if (path === "/api/v1/tags") return json(route, { items: [{ id: 1, category: "author", value: "林一", uses: 12 }, { id: 2, category: "language", value: "中文", uses: 31 }, { id: 3, category: "source", value: "原创", uses: 8 }] });
+    if (path === "/api/v1/tags") {
+      options.tagRequests?.push(url.search);
+      return json(route, { items: [{ id: 1, category: "artist", value: "林一", uses: 12 }, { id: 4, category: "artist", value: "林二", uses: 6 }, { id: 5, category: "artist", value: "一段很长的作者名称甲", uses: 5 }, { id: 6, category: "artist", value: "一段很长的作者名称乙", uses: 4 }, { id: 2, category: "language", value: "中文", uses: 31 }, { id: 3, category: "source", value: "原创", uses: 8 }] });
+    }
     if (path === `/api/v1/files/${fileId}`) {
       if (options.missingDetail) return json(route, { error: { message: "文件不存在" } }, 404);
       return json(route, detail);
@@ -127,8 +131,8 @@ test("URL 刷新恢复目录、分页、搜索、筛选和排序状态", async (
   await page.goto(url);
   await expect(page.getByRole("heading", { name: "收藏" })).toBeVisible();
   await expect(page.getByRole("searchbox", { name: "搜索文件名" })).toHaveValue("森林");
-  await expect(page.getByRole("button", { name: /author:林一/ })).toHaveAttribute("aria-pressed", "true");
-  await expect(page.getByRole("button", { name: /source:原创/ })).toBeVisible();
+  await expect(page.locator(".tag-select-field").filter({ hasText: "作者" })).toContainText("林一");
+  await expect(page.getByText("来源", { exact: true })).toBeVisible();
   await expect(page.getByLabel("排序")).toHaveValue("modified");
   await page.reload();
   await expect(page).toHaveURL(new RegExp("page=2.*q="));
@@ -156,11 +160,37 @@ test("搜索严格等待 300ms 且只提交最后输入", async ({ page }) => {
   await expect.poll(() => catalogRequests.map((query) => new URLSearchParams(query).get("query"))).toEqual(["森林社"]);
 });
 
+test("多个长标签保持在选择框内", async ({ page }) => {
+  await mockApi(page);
+  await page.setViewportSize({ width: 360, height: 800 });
+  await page.goto("/?tag=1&tag=4&tag=5&tag=6");
+  const artist = page.locator(".tag-select-field").filter({ hasText: "作者" });
+  const selection = artist.locator(".n-base-selection");
+  const tags = artist.locator(".n-base-selection-tags");
+  await expect(artist).toContainText("+3");
+  await expect(selection).toHaveCSS("height", "42px");
+  await expect(tags).toHaveCSS("overflow", "hidden");
+  const [selectionBox, tagsBox] = await Promise.all([selection.boundingBox(), tags.boundingBox()]);
+  expect(selectionBox).not.toBeNull();
+  expect(tagsBox).not.toBeNull();
+  expect(tagsBox!.x).toBeGreaterThanOrEqual(selectionBox!.x);
+  expect(tagsBox!.x + tagsBox!.width).toBeLessThanOrEqual(selectionBox!.x + selectionBox!.width + 1);
+  expect(tagsBox!.y + tagsBox!.height).toBeLessThanOrEqual(selectionBox!.y + selectionBox!.height + 1);
+});
+
 test("筛选排序写入 URL，评分失败会回滚并提示", async ({ page }) => {
-  await mockApi(page, { ratingFailure: true });
+  const catalogRequests: string[] = [];
+  const tagRequests: string[] = [];
+  await mockApi(page, { ratingFailure: true, catalogRequests, tagRequests });
   await page.goto("/");
-  await page.getByRole("button", { name: /author:林一/ }).click();
-  await expect(page).toHaveURL(/tag=1/);
+  const artist = page.locator(".tag-select-field").filter({ hasText: "作者" });
+  await artist.locator(".n-base-selection").click();
+  await page.locator(".n-base-select-option").filter({ hasText: "林一" }).click();
+  await artist.getByRole("textbox").fill("林二");
+  await page.locator(".n-base-select-option").filter({ hasText: "林二" }).click();
+  await expect(page).toHaveURL(/tag=1.*tag=4/);
+  await expect.poll(() => catalogRequests.at(-1) ?? "").toContain("tag_mode=grouped");
+  expect(tagRequests).toHaveLength(1);
   await page.getByLabel("排序").selectOption("rating");
   await expect(page).toHaveURL(/sort=rating/);
   const row = page.getByRole("article").filter({ hasText: file.name });
