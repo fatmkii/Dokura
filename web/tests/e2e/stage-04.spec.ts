@@ -13,7 +13,7 @@ const file = {
   modified_ns: 1_784_208_600_000_000_000,
   rating: 2,
   status: "ready",
-  cover_status: "ready",
+  cover_status: "complete",
   content_version: "v1",
   tags: [
     { id: 1, category: "author", value: "林一" },
@@ -82,7 +82,7 @@ async function mockApi(page: Page, options: MockOptions = {}): Promise<void> {
         result_version: "test-v1",
       });
     }
-    if (path === "/api/v1/tags") return json(route, { items: [{ id: 1, category: "author", value: "林一", uses: 12 }, { id: 2, category: "language", value: "中文", uses: 31 }] });
+    if (path === "/api/v1/tags") return json(route, { items: [{ id: 1, category: "author", value: "林一", uses: 12 }, { id: 2, category: "language", value: "中文", uses: 31 }, { id: 3, category: "source", value: "原创", uses: 8 }] });
     if (path === `/api/v1/files/${fileId}`) {
       if (options.missingDetail) return json(route, { error: { message: "文件不存在" } }, 404);
       return json(route, detail);
@@ -117,6 +117,8 @@ test("登录后进入内容库并提示修改默认密码", async ({ page }) => 
   await expect(page).toHaveURL(/\/$/);
   await expect(page.getByRole("heading", { name: "内容库" })).toBeVisible();
   await expect(page.getByText(/当前仍在使用默认密码/)).toBeVisible();
+  await expect(page.locator(".search-field").getByText("300 ms")).toHaveCount(0);
+  await expect(page.locator(".directory-open small")).toHaveCount(0);
 });
 
 test("URL 刷新恢复目录、分页、搜索、筛选和排序状态", async ({ page }) => {
@@ -126,6 +128,7 @@ test("URL 刷新恢复目录、分页、搜索、筛选和排序状态", async (
   await expect(page.getByRole("heading", { name: "收藏" })).toBeVisible();
   await expect(page.getByRole("searchbox", { name: "搜索文件名" })).toHaveValue("森林");
   await expect(page.getByRole("button", { name: /author:林一/ })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("button", { name: /source:原创/ })).toBeVisible();
   await expect(page.getByLabel("排序")).toHaveValue("modified");
   await page.reload();
   await expect(page).toHaveURL(new RegExp("page=2.*q="));
@@ -164,6 +167,7 @@ test("筛选排序写入 URL，评分失败会回滚并提示", async ({ page })
   await row.getByRole("button", { name: "4 星" }).click();
   await expect(page.getByText("评分保存失败，已恢复原值")).toBeVisible();
   await expect(row.getByRole("button", { name: "2 星" })).toHaveAttribute("aria-pressed", "true");
+  await expect(row.getByText(/未评分|2\.0/)).toHaveCount(0);
 });
 
 test("详情只请求可见预览，进入阅读器后才请求原图", async ({ page }) => {
@@ -172,6 +176,11 @@ test("详情只请求可见预览，进入阅读器后才请求原图", async ({
   await mockApi(page, { previewRequests, originalRequests });
   await page.goto(`/files/${fileId}`);
   await expect(page.getByRole("heading", { name: file.name })).toBeVisible();
+  await expect(page.locator(".detail-cover img")).toBeVisible();
+  await expect(page.locator(".detail-intro").getByText(detail.relative_path)).toHaveCount(0);
+  await expect(page.locator(".detail-actions").getByText(/未评分|2\.0/)).toHaveCount(0);
+  await expect(page.locator(".detail-actions .rating-star").first()).toHaveCSS("font-size", "32px");
+  await expect(page.locator(".detail-back button")).toHaveCSS("font-size", "24px");
   await page.getByRole("heading", { name: "内容预览" }).scrollIntoViewIfNeeded();
   await expect.poll(() => previewRequests.length).toBeGreaterThan(0);
   expect(previewRequests.length).toBeLessThan(40);

@@ -22,6 +22,5 @@ const emit = defineEmits<{ "update:modelValue": [value: number] }>();
       :aria-pressed="value === modelValue"
       @click="emit('update:modelValue', value === modelValue ? 0 : value)"
     >★</button>
-    <span class="rating-value">{{ modelValue ? `${modelValue}.0` : zhCN.unrated }}</span>
   </fieldset>
 </template>

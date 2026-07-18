@@ -105,14 +105,13 @@ onBeforeUnmount(() => {
 
       <section class="detail-hero">
         <div class="detail-cover">
-          <img v-if="detail.cover_status === 'ready'" :src="coverUrl(detail.id)" :alt="zhCN.coverAlt(detail.name)" />
+          <img v-if="detail.cover_status === 'complete'" :src="coverUrl(detail.id)" :alt="zhCN.coverAlt(detail.name)" />
           <span v-else>NO<br />COVER</span>
           <i>{{ String(detail.page_count).padStart(3, "0") }} PAGES</i>
         </div>
         <div class="detail-intro">
           <p class="section-index">FILE / {{ detail.id.slice(0, 8).toUpperCase() }}</p>
           <h1>{{ detail.name }}</h1>
-          <p class="detail-path">{{ detail.relative_path }}</p>
           <div class="hero-tags">
             <span v-for="tag in detail.tags" :key="tag.id"><small>{{ categoryLabel(tag.category) }}</small>{{ tag.value }}</span>
             <span v-if="!detail.tags.length"><small>{{ zhCN.tags }}</small>{{ zhCN.unrecognized }}</span>

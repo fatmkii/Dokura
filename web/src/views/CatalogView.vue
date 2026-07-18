@@ -57,7 +57,7 @@ async function load(): Promise<void> {
     if (previousVersion.value && previousVersion.value !== catalog.result_version) versionChanged.value = true;
     previousVersion.value = catalog.result_version;
     result.value = catalog;
-    tags.value = tagResult.items.filter((tag) => ["author", "parody", "language"].includes(tag.category));
+    tags.value = tagResult.items;
   } catch (reason) {
     if ((reason as Error).name !== "AbortError") {
       if (reason instanceof ApiError && reason.status === 401) {
@@ -253,7 +253,6 @@ onBeforeUnmount(() => {
       <label class="search-field">
         <span aria-hidden="true">⌕</span>
         <input :value="searchInput" type="search" :placeholder="zhCN.search" :aria-label="zhCN.search" @input="setSearch(($event.target as HTMLInputElement).value)" />
-        <small>300 ms</small>
       </label>
       <label class="tool-field">{{ zhCN.currentDirectory }}
         <select :value="state.scope" @change="replaceState({ scope: ($event.target as HTMLSelectElement).value as CatalogState['scope'] })">
@@ -294,17 +293,16 @@ onBeforeUnmount(() => {
     <section v-else class="catalog-list" :aria-busy="loading">
       <div v-if="files.length" class="selection-row"><label><input type="checkbox" :checked="allPageSelected" @change="togglePage" /> {{ zhCN.selectPage }}</label><button type="button" @click="selectAllResults">{{ zhCN.selectAllResults }} {{ result?.total }}</button></div>
       <div v-for="item in directories" :key="`dir-${item.relative_path}`" class="directory-row">
-        <button class="directory-open" type="button" @click="openDirectory(item.relative_path)"><span class="folder-icon" aria-hidden="true"></span><strong>{{ item.name }}</strong><small>{{ item.relative_path }}</small></button>
+        <button class="directory-open" type="button" @click="openDirectory(item.relative_path)"><span class="folder-icon" aria-hidden="true"></span><strong>{{ item.name }}</strong></button>
         <div class="row-management"><button type="button" @click="renameFolder(item.relative_path, item.name)">{{ zhCN.rename }}</button><button type="button" @click="moveFolder(item.relative_path)">{{ zhCN.move }}</button><button class="danger-link" type="button" @click="deleteFolder(item.relative_path)">{{ zhCN.permanentDelete }}</button><i>→</i></div>
       </div>
       <article v-for="item in files" :key="item.id" class="file-row">
         <label class="row-check"><input type="checkbox" :checked="selected.has(item.id)" :aria-label="`${zhCN.select} ${item.name}`" @change="toggleFile(item.id)" /></label>
         <RouterLink class="file-cover" :to="{ name: 'detail', params: { id: item.id }, query: { from: route.fullPath } }" :aria-label="zhCN.viewFile(item.name)">
-          <img v-if="item.cover_status === 'ready'" :src="coverUrl(item.id)" alt="" loading="lazy" /><span v-else>ZIP</span>
+          <img v-if="item.cover_status === 'complete'" :src="coverUrl(item.id)" alt="" loading="lazy" /><span v-else>ZIP</span>
         </RouterLink>
         <div class="file-main">
           <div class="file-title-line"><RouterLink :to="{ name: 'detail', params: { id: item.id }, query: { from: route.fullPath } }">{{ item.name }}</RouterLink><span class="status-badge" :data-status="item.status">{{ statusLabel(item.status) }}</span></div>
-          <p>{{ item.display_path }}</p>
           <div class="file-tags"><span v-for="tag in item.tags" :key="tag.id">{{ tag.category }}:{{ tag.value }}</span><span v-if="!item.tags.length">{{ zhCN.unrecognized }}</span></div>
         </div>
         <div class="file-facts"><span>{{ formatBytes(item.size) }}</span><span>{{ formatDate(item.modified_ns) }}</span></div>
