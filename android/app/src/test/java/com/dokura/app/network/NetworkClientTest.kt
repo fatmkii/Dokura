@@ -43,6 +43,15 @@ class NetworkClientTest {
         assertEquals(ConnectionTestResult.InvalidApiKey, NetworkClient.test(settings(), "secret"))
     }
 
+    @Test fun invalidHeaderCharacterInApiKeyDoesNotCrash() = runTest {
+        server.enqueue(json("""{"service":"Dokura","server_version":"0.1","api_version":"1"}"""))
+        server.enqueue(json("{}", 401))
+
+        assertEquals(ConnectionTestResult.InvalidApiKey, NetworkClient.test(settings(), "secret\u0000suffix"))
+        assertEquals(null, server.takeRequest().headers["Authorization"])
+        assertEquals(null, server.takeRequest().headers["Authorization"])
+    }
+
     @Test fun distinguishesIncompatibleApiVersion() = runTest {
         server.enqueue(json("""{"service":"Dokura","server_version":"0.1","api_version":"2"}"""))
         assertEquals(ConnectionTestResult.IncompatibleVersion("2"), NetworkClient.test(settings(), "secret"))
@@ -59,6 +68,25 @@ class NetworkClientTest {
         assertEquals(ConnectionTestResult.Success("0.1.0"), NetworkClient.test(settings(), "secret"))
         server.takeRequest()
         assertEquals("Bearer secret", server.takeRequest().headers["Authorization"])
+    }
+
+    @Test fun catalogDirectoryWithoutTagsUsesEmptyList() = runTest {
+        server.enqueue(json("""{"items":[{"kind":"directory","name":"子目录","relative_path":"子目录"}],"page":1,"per_page":40,"total":1,"pages":1,"result_version":"v1"}"""))
+
+        val response = requireNotNull(NetworkClient.api(settings(), { "secret" })).catalog(
+            path = "", page = 1, query = "", scope = "current", tagIds = emptyList(),
+            tagMode = "all", ratingMin = 0, ratingMax = 5, sort = "name", direction = "asc",
+        )
+
+        assertEquals(emptyList<com.dokura.app.data.TagDto>(), response.items.single().tags)
+    }
+
+    @Test fun tagCandidateUsesCountIsDeserialized() = runTest {
+        server.enqueue(json("""{"items":[{"id":7,"category":"artist","value":"作者甲","uses":12}]}"""))
+
+        val response = requireNotNull(NetworkClient.api(settings(), { "secret" })).tags("", "current")
+
+        assertEquals(12, response.items.single().count)
     }
 
     @Test fun retriesReadThreeTimesWithSpecifiedDelays() = runTest {

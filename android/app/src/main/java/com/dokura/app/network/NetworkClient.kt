@@ -40,7 +40,9 @@ object NetworkClient {
         .addInterceptor { chain ->
             val key = apiKey()
             val request = chain.request().newBuilder().apply {
-                if (key.isNotBlank()) header("Authorization", "Bearer $key")
+                if (key.isNotBlank() && key.all { it == '\t' || it.code in 0x20..0x7e }) {
+                    header("Authorization", "Bearer $key")
+                }
                 header("X-Dokura-Client-ID", "android")
             }.build()
             chain.proceed(request)

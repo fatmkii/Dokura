@@ -176,7 +176,7 @@ def list_catalog(engine, query: CatalogQuery) -> dict[str, object]:
             f"{latest_scan}:{latest_change}:{latest_rating}:{total}".encode()
         ).hexdigest()[:16]
         items = [
-            {"kind": "directory", "name": item.name_nfc, "relative_path": item.relative_path}
+            {"kind": "directory", "name": item.name_nfc, "relative_path": item.relative_path, "tags": []}
             for item in directories
         ] + [_file_item(item, tags[item.id], query.path) for item in files]
         return {

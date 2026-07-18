@@ -27,7 +27,12 @@ data class IdentityResponse(
 )
 
 data class TagDto(val id: Long, val category: String, val value: String)
-data class TagCandidateDto(val id: Long, val category: String, val value: String, val count: Int)
+data class TagCandidateDto(
+    val id: Long,
+    val category: String,
+    val value: String,
+    @SerializedName("uses") val count: Int,
+)
 data class TagCandidatesResponse(val items: List<TagCandidateDto>)
 
 data class CatalogItemDto(
@@ -41,8 +46,10 @@ data class CatalogItemDto(
     val status: String = "ready",
     @SerializedName("cover_status") val coverStatus: String = "not_generated",
     @SerializedName("content_version") val contentVersion: String = "",
-    val tags: List<TagDto> = emptyList(),
-)
+    @SerializedName("tags") private val serializedTags: List<TagDto>? = null,
+) {
+    val tags: List<TagDto> get() = serializedTags.orEmpty()
+}
 
 data class CatalogResponse(
     val items: List<CatalogItemDto>,
@@ -85,7 +92,7 @@ data class CatalogQuery(
     val search: String = "",
     val recursive: Boolean = false,
     val tagIds: List<Long> = emptyList(),
-    val tagMode: String = "all",
+    val tagMode: String = "grouped",
     val ratingMin: Int = 0,
     val ratingMax: Int = 5,
     val sort: String = "name",

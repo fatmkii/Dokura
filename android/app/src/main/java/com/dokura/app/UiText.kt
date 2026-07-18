@@ -1,8 +1,9 @@
 package com.dokura.app
 
 object UiText {
-    const val Catalog = "资料库"
+    const val Catalog = "书库"
     const val Recent = "最近阅读"
+    const val RecentNav = "最近"
     const val Settings = "设置"
     const val SearchHint = "搜索文件名"
     const val Retry = "重试"

@@ -56,6 +56,12 @@ data class DetailUiState(
 
 data class DirectorySnapshot(val state: CatalogUiState, val firstVisibleItem: Int)
 
+data class TagOptionsUiState(
+    val items: List<TagCandidateDto> = emptyList(),
+    val loading: Boolean = false,
+    val error: String? = null,
+)
+
 class DokuraViewModel(application: Application) : AndroidViewModel(application) {
     private val settingsStore = SettingsStore(application)
     private val credentials = CredentialStore(application)
@@ -70,7 +76,7 @@ class DokuraViewModel(application: Application) : AndroidViewModel(application) 
     private val _catalog = MutableStateFlow(CatalogUiState())
     private val _detail = MutableStateFlow(DetailUiState())
     private val _connectionTest = MutableStateFlow<ConnectionTestResult?>(null)
-    private val _tags = MutableStateFlow<List<TagCandidateDto>>(emptyList())
+    private val _tagOptions = MutableStateFlow(TagOptionsUiState())
     private val directoryStack = ArrayDeque<DirectorySnapshot>()
     private var catalogJob: Job? = null
     private var searchJob: Job? = null
@@ -93,7 +99,7 @@ class DokuraViewModel(application: Application) : AndroidViewModel(application) 
     val catalog = _catalog.asStateFlow()
     val detail = _detail.asStateFlow()
     val connectionTest = _connectionTest.asStateFlow()
-    val tags = _tags.asStateFlow()
+    val tagOptions = _tagOptions.asStateFlow()
     val cacheBytes = imageCache.totalBytes.stateIn(viewModelScope, SharingStarted.Eagerly, 0L)
     val reader = ReaderController(application, viewModelScope, progressDao, imageCache, ::imageUrl, ::imageHeaders)
     val readerState = reader.state
@@ -204,10 +210,12 @@ class DokuraViewModel(application: Application) : AndroidViewModel(application) 
         searchJob?.cancel()
     }
 
-    fun loadTags() = viewModelScope.launch {
+    fun loadTags(recursive: Boolean = _catalog.value.query.recursive) = viewModelScope.launch {
         val query = _catalog.value.query
-        runCatching { retryRead { requireApi().tags(query.path, if (query.recursive) "recursive" else "current") } }
-            .onSuccess { _tags.value = it.items }
+        _tagOptions.value = _tagOptions.value.copy(loading = true, error = null)
+        runCatching { retryRead { requireApi().tags(query.path, if (recursive) "recursive" else "current") } }
+            .onSuccess { _tagOptions.value = TagOptionsUiState(items = it.items) }
+            .onFailure { _tagOptions.value = _tagOptions.value.copy(loading = false, error = userMessage(it)) }
     }
 
     fun applyFilters(

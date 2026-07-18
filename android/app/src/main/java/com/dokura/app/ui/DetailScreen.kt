@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -35,6 +36,9 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.platform.LocalDensity
@@ -136,30 +140,52 @@ private fun Hero(
     onRead: (Int) -> Unit,
     cache: ImageCache,
 ) {
-    Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.Top) {
-        RemoteImage(
-            url = imageUrl("api/v1/files/${item.id}/cover"),
-            headers = headers,
-            description = item.name,
-            modifier = Modifier.fillMaxWidth(.4f).aspectRatio(.72f),
-            cache = cache,
-            cacheKey = ImageCache.key(CacheCategory.COVER, item.id),
-            category = CacheCategory.COVER,
-            contentVersion = item.contentVersion,
-        )
-        Spacer(Modifier.width(16.dp))
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text(item.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-            Text(tagSummary(item), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall)
-            Row {
-                (0..5).forEach { value ->
-                    TextButton(onClick = { onRating(value) }, enabled = !savingRating) {
-                        Text(if (value == 0) "清除" else if (value <= item.rating) "★" else "☆")
-                    }
+    Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+            RemoteImage(
+                url = imageUrl("api/v1/files/${item.id}/cover"),
+                headers = headers,
+                description = item.name,
+                modifier = Modifier.fillMaxWidth(.4f).aspectRatio(.72f),
+                cache = cache,
+                cacheKey = ImageCache.key(CacheCategory.COVER, item.id),
+                category = CacheCategory.COVER,
+                contentVersion = item.contentVersion,
+            )
+            Spacer(Modifier.width(16.dp))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(item.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                Text(tagSummary(item), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall)
+            }
+        }
+        RatingSelector(item.rating, savingRating, onRating)
+        Button(onClick = { onRead(startPage) }) { Text("从第 ${startPage} 页开始浏览") }
+        if (error != null) Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+    }
+}
+
+@Composable
+internal fun RatingSelector(rating: Int, saving: Boolean, onRating: (Int) -> Unit) {
+    Column(Modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("评分", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Medium)
+            TextButton(onClick = { onRating(0) }, enabled = !saving && rating > 0) { Text("清除") }
+        }
+        Row(Modifier.fillMaxWidth()) {
+            (1..5).forEach { value ->
+                TextButton(
+                    onClick = { onRating(value) },
+                    modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag("rating:$value")
+                        .semantics { contentDescription = "评分 $value 星" },
+                    enabled = !saving,
+                ) {
+                    Text(
+                        if (value <= rating) "★" else "☆",
+                        color = if (value <= rating) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                        style = MaterialTheme.typography.titleLarge,
+                    )
                 }
             }
-            Button(onClick = { onRead(startPage) }) { Text("从第 ${startPage} 页开始浏览") }
-            if (error != null) Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
         }
     }
 }

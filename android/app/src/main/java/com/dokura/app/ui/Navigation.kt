@@ -18,11 +18,11 @@ import androidx.navigation.navArgument
 import com.dokura.app.DokuraViewModel
 import com.dokura.app.UiText
 
-private data class Destination(val route: String, val label: String, val mark: String)
+private data class Destination(val route: String, val label: String)
 private val destinations = listOf(
-    Destination("catalog", UiText.Catalog, "库"),
-    Destination("recent", UiText.Recent, "近"),
-    Destination("settings", UiText.Settings, "设"),
+    Destination("catalog", UiText.Catalog),
+    Destination("recent", UiText.RecentNav),
+    Destination("settings", UiText.Settings),
 )
 
 @Composable
@@ -43,8 +43,7 @@ fun DokuraNavigation(viewModel: DokuraViewModel) {
                                 restoreState = true
                             }
                         },
-                        icon = { Text(destination.mark) },
-                        label = { Text(destination.label) },
+                        icon = { Text(destination.label) },
                     )
                 }
             }

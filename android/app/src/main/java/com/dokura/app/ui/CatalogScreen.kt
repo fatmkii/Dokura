@@ -5,12 +5,14 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.padding
@@ -22,11 +24,13 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Slider
+import androidx.compose.material3.RangeSlider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -43,15 +47,18 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.dokura.app.DokuraViewModel
+import com.dokura.app.TagOptionsUiState
 import com.dokura.app.UiText
 import com.dokura.app.data.CatalogItemDto
 import com.dokura.app.cache.ImageCache
 import com.dokura.app.data.CacheCategory
 import com.dokura.app.data.TagCandidateDto
+import com.dokura.app.data.TagDto
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 
@@ -59,7 +66,7 @@ import kotlinx.coroutines.launch
 fun CatalogScreen(viewModel: DokuraViewModel, openDetail: (String) -> Unit) {
     val state by viewModel.catalog.collectAsState()
     val settings by viewModel.settings.collectAsState()
-    val tags by viewModel.tags.collectAsState()
+    val tagOptions by viewModel.tagOptions.collectAsState()
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
     var showFilters by remember { mutableStateOf(false) }
@@ -123,8 +130,8 @@ fun CatalogScreen(viewModel: DokuraViewModel, openDetail: (String) -> Unit) {
             initialDirection = state.query.direction,
             initialRecursive = state.query.recursive,
             initialTagIds = state.query.tagIds,
-            initialTagMode = state.query.tagMode,
-            tags = tags,
+            tagOptions = tagOptions,
+            onReloadTags = { viewModel.loadTags(it) },
             onDismiss = { showFilters = false },
             onApply = { min, max, sort, direction, recursive, tagIds, tagMode ->
                 showFilters = false
@@ -208,15 +215,18 @@ private fun CatalogList(
                 }
                 Spacer(Modifier.width(14.dp))
                 Column(Modifier.weight(1f)) {
-                    Text(item.name, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Medium)
-                    val summary = item.tags.filter { it.category in setOf("author", "original", "language") }.joinToString(" · ") { it.value }
                     Text(
-                        summary.ifBlank { if (item.kind == "directory") item.relativePath else UiText.Unrecognized },
-                        maxLines = 1,
+                        item.name,
+                        maxLines = if (item.kind == "directory") 1 else 3,
                         overflow = TextOverflow.Ellipsis,
-                        color = MaterialTheme.colorScheme.outline,
-                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Medium,
                     )
+                    if (item.kind == "directory") {
+                        CatalogTagLine(item.relativePath)
+                    } else {
+                        val lines = catalogTagLines(item.tags)
+                        if (lines.isEmpty()) CatalogTagLine(UiText.Unrecognized) else lines.forEach { CatalogTagLine(it) }
+                    }
                 }
                 if (item.kind == "file" && item.rating > 0) Text("${item.rating}★", color = MaterialTheme.colorScheme.secondary)
             }
@@ -226,16 +236,38 @@ private fun CatalogList(
     }
 }
 
+private val CatalogTagCategories = listOf(
+    "artist" to "作者",
+    "source" to "来源",
+    "language" to "语言",
+)
+
+internal fun catalogTagLines(tags: List<TagDto>): List<String> = CatalogTagCategories.mapNotNull { (category, label) ->
+    tags.filter { it.category == category }.map { it.value }.takeIf { it.isNotEmpty() }
+        ?.joinToString("、", prefix = "$label：")
+}
+
 @Composable
-private fun FiltersDialog(
+private fun CatalogTagLine(value: String) {
+    Text(
+        value,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        color = MaterialTheme.colorScheme.outline,
+        style = MaterialTheme.typography.bodySmall,
+    )
+}
+
+@Composable
+internal fun FiltersDialog(
     initialMin: Int,
     initialMax: Int,
     initialSort: String,
     initialDirection: String,
     initialRecursive: Boolean,
     initialTagIds: List<Long>,
-    initialTagMode: String,
-    tags: List<TagCandidateDto>,
+    tagOptions: TagOptionsUiState,
+    onReloadTags: (Boolean) -> Unit,
     onDismiss: () -> Unit,
     onApply: (Int, Int, String, String, Boolean, List<Long>, String) -> Unit,
 ) {
@@ -245,41 +277,168 @@ private fun FiltersDialog(
     var direction by remember { mutableStateOf(initialDirection) }
     var recursive by remember { mutableStateOf(initialRecursive) }
     var selectedTags by remember { mutableStateOf(initialTagIds.toSet()) }
-    var tagMode by remember { mutableStateOf(initialTagMode) }
+    var activeCategory by remember { mutableStateOf<String?>(null) }
+    val categories = listOf("source" to "来源", "artist" to "作者", "language" to "语言")
+
+    if (activeCategory == null) {
+        AlertDialog(
+            onDismissRequest = onDismiss,
+            title = { Text(UiText.Filters) },
+            text = {
+                Column(
+                    Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text("评分：$min～$max 星")
+                    RangeSlider(
+                        value = min.toFloat()..max.toFloat(),
+                        onValueChange = {
+                            min = it.start.roundToInt()
+                            max = it.endInclusive.roundToInt()
+                        },
+                        modifier = Modifier.fillMaxWidth().testTag("ratingRange"),
+                        valueRange = 0f..5f,
+                        steps = 4,
+                    )
+                    Text("排序")
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        listOf("name" to "名称", "modified" to "修改时间", "size" to "大小", "rating" to "评分").forEach { (key, label) ->
+                            TextButton(onClick = { sort = key }) { Text(if (sort == key) "• $label" else label) }
+                        }
+                    }
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        TextButton(onClick = { direction = "asc" }) { Text(if (direction == "asc") "• 升序" else "升序") }
+                        TextButton(onClick = { direction = "desc" }) { Text(if (direction == "desc") "• 降序" else "降序") }
+                        TextButton(onClick = {
+                            recursive = !recursive
+                            onReloadTags(recursive)
+                        }) { Text(if (recursive) "• 包含子目录" else "当前目录") }
+                    }
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text("标签", Modifier.weight(1f), fontWeight = FontWeight.Medium)
+                        if (selectedTags.isNotEmpty()) TextButton(onClick = { selectedTags = emptySet() }) { Text("清除") }
+                    }
+                    when {
+                        tagOptions.loading -> Row(verticalAlignment = Alignment.CenterVertically) {
+                            CircularProgressIndicator(Modifier.width(24.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("正在加载标签…")
+                        }
+                        tagOptions.error != null -> Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(tagOptions.error, Modifier.weight(1f), color = MaterialTheme.colorScheme.error)
+                            TextButton(onClick = { onReloadTags(recursive) }) { Text("重试") }
+                        }
+                    }
+                    categories.forEach { (category, label) ->
+                        TagCategoryField(
+                            category = category,
+                            label = label,
+                            options = tagOptions.items.filter { it.category == category },
+                            selectedIds = selectedTags,
+                            enabled = !tagOptions.loading && tagOptions.error == null,
+                            onClick = { activeCategory = category },
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(onClick = { onApply(min, max, sort, direction, recursive, selectedTags.toList(), "grouped") }) { Text("应用") }
+            },
+            dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+        )
+    } else {
+        val category = requireNotNull(activeCategory)
+        val label = requireNotNull(categories.firstOrNull { it.first == category }?.second)
+        val options = tagOptions.items.filter { it.category == category }
+        val categoryIds = options.mapTo(mutableSetOf()) { it.id }
+        TagPickerDialog(
+            category = category,
+            label = label,
+            options = options,
+            initialSelected = selectedTags.intersect(categoryIds),
+            onDismiss = { activeCategory = null },
+            onConfirm = { chosen ->
+                selectedTags = (selectedTags - categoryIds) + chosen
+                activeCategory = null
+            },
+        )
+    }
+}
+
+@Composable
+private fun TagCategoryField(
+    category: String,
+    label: String,
+    options: List<TagCandidateDto>,
+    selectedIds: Set<Long>,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    val selected = options.filter { it.id in selectedIds }
+    val summary = when {
+        selected.isEmpty() -> "未选择"
+        selected.size == 1 -> selected.single().value
+        else -> "${selected.first().value} 等 ${selected.size} 项"
+    }
+    OutlinedButton(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("tagField:$category"),
+        enabled = enabled,
+    ) {
+        Text(label)
+        Spacer(Modifier.weight(1f))
+        Text(summary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+@Composable
+private fun TagPickerDialog(
+    category: String,
+    label: String,
+    options: List<TagCandidateDto>,
+    initialSelected: Set<Long>,
+    onDismiss: () -> Unit,
+    onConfirm: (Set<Long>) -> Unit,
+) {
+    var search by remember(category) { mutableStateOf("") }
+    var selected by remember(category, initialSelected) { mutableStateOf(initialSelected) }
+    val filtered = remember(options, search) {
+        val keyword = search.trim().lowercase()
+        if (keyword.isEmpty()) options else options.filter { it.value.lowercase().contains(keyword) }
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(UiText.Filters) },
+        title = { Text("选择$label（${selected.size}）") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("评分：$min～$max 星")
-                Slider(value = min.toFloat(), onValueChange = { min = it.roundToInt().coerceAtMost(max) }, valueRange = 0f..5f, steps = 4)
-                Slider(value = max.toFloat(), onValueChange = { max = it.roundToInt().coerceAtLeast(min) }, valueRange = 0f..5f, steps = 4)
-                Text("排序")
-                Row { listOf("name" to "名称", "modified" to "修改时间", "size" to "大小", "rating" to "评分").forEach { (key, label) -> TextButton(onClick = { sort = key }) { Text(if (sort == key) "• $label" else label) } } }
-                Row {
-                    TextButton(onClick = { direction = "asc" }) { Text(if (direction == "asc") "• 升序" else "升序") }
-                    TextButton(onClick = { direction = "desc" }) { Text(if (direction == "desc") "• 降序" else "降序") }
-                    TextButton(onClick = { recursive = !recursive }) { Text(if (recursive) "• 包含子目录" else "当前目录") }
-                }
-                Text("Tag")
-                Row {
-                    TextButton(onClick = { tagMode = "all" }) { Text(if (tagMode == "all") "• 同时包含" else "同时包含") }
-                    TextButton(onClick = { tagMode = "any" }) { Text(if (tagMode == "any") "• 任一匹配" else "任一匹配") }
-                    if (selectedTags.isNotEmpty()) TextButton(onClick = { selectedTags = emptySet() }) { Text("清除") }
-                }
-                Column(Modifier.height(150.dp).verticalScroll(rememberScrollState())) {
-                    tags.forEach { tag ->
-                        TextButton(
-                            onClick = { selectedTags = if (tag.id in selectedTags) selectedTags - tag.id else selectedTags + tag.id },
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Text(if (tag.id in selectedTags) "✓ ${tag.value} · ${tag.count}" else "${tag.value} · ${tag.count}", Modifier.fillMaxWidth())
+                OutlinedTextField(
+                    value = search,
+                    onValueChange = { search = it },
+                    modifier = Modifier.fillMaxWidth().testTag("tagSearch:$category"),
+                    singleLine = true,
+                    label = { Text("搜索$label") },
+                )
+                if (filtered.isEmpty()) {
+                    Box(Modifier.fillMaxWidth().height(96.dp), contentAlignment = Alignment.Center) { Text("没有匹配的标签") }
+                } else {
+                    LazyColumn(Modifier.fillMaxWidth().heightIn(max = 320.dp)) {
+                        items(filtered, key = { it.id }) { tag ->
+                            Row(
+                                Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                                    .clickable { selected = if (tag.id in selected) selected - tag.id else selected + tag.id }
+                                    .testTag("tagOption:${tag.id}"),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Checkbox(checked = tag.id in selected, onCheckedChange = null)
+                                Spacer(Modifier.width(8.dp))
+                                Text("${tag.value}（${tag.count}）", Modifier.weight(1f))
+                            }
                         }
                     }
                 }
             }
         },
-        confirmButton = { Button(onClick = { onApply(min, max, sort, direction, recursive, selectedTags.toList(), tagMode) }) { Text("应用") } },
+        confirmButton = { Button(onClick = { onConfirm(selected) }) { Text("确定") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
     )
 }

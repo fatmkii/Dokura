@@ -160,6 +160,10 @@ def test_catalog_search_filters_pagination_rating_and_query_plans(settings) -> N
         source_x = add_tag(app, [first_id, second_id], "source", "来源甲")
         add_tag(app, [third_id], "source", "来源乙")
 
+        root = client.get("/api/v1/catalog").json()
+        directory = next(item for item in root["items"] if item["kind"] == "directory")
+        assert directory["tags"] == []
+
         one = client.get("/api/v1/catalog", params={"path": "子目录", "query": "é"}).json()
         trigram = client.get("/api/v1/catalog", params={"path": "子目录", "query": "CAFE\u0301"}).json()
         assert one["total"] == trigram["total"] == 2
