@@ -37,17 +37,23 @@ class EventWindow:
         return result
 
 
-async def watch_content(content_dir: Path, scans: ScanCoordinator) -> None:
+async def watch_content(
+    content_dir: Path, scans: ScanCoordinator, stop_event: asyncio.Event | None = None,
+) -> None:
     """Watch recursively and retain only the latest event per normalized path each second."""
     window = EventWindow()
     unavailable = False
-    while True:
+    stop_event = stop_event or asyncio.Event()
+    while not stop_event.is_set():
         if not content_dir.is_dir():
             if not unavailable:
                 logger.warning("Content 监听暂时不可用: %s", content_dir)
                 scans.request_scan()
                 unavailable = True
-            await asyncio.sleep(1)
+            try:
+                await asyncio.wait_for(stop_event.wait(), timeout=1)
+            except TimeoutError:
+                pass
             continue
         if unavailable:
             scans.request_scan()
@@ -55,7 +61,7 @@ async def watch_content(content_dir: Path, scans: ScanCoordinator) -> None:
         try:
             async for changes in awatch(
                 content_dir, debounce=100, step=50, rust_timeout=100,
-                yield_on_timeout=True, recursive=True,
+                yield_on_timeout=True, recursive=True, stop_event=stop_event,
             ):
                 now = monotonic()
                 window.add(changes, now)
@@ -72,4 +78,7 @@ async def watch_content(content_dir: Path, scans: ScanCoordinator) -> None:
                 window.pop_if_due(monotonic())
             scans.request_scan()
             unavailable = True
-            await asyncio.sleep(1)
+            try:
+                await asyncio.wait_for(stop_event.wait(), timeout=1)
+            except TimeoutError:
+                pass

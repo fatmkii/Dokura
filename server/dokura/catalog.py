@@ -59,11 +59,12 @@ def _file_filters(query: CatalogQuery):
     folded = normalized_casefold(query.query.strip())
     params: dict[str, str] = {}
     if folded:
-        filters.append(File.filename_casefold.contains(folded, autoescape=True))
         if len(folded) >= 3:
             candidate = select(column("file_id")).select_from(text("files_fts")).where(text("files_fts MATCH :fts_query"))
             filters.append(File.id.in_(candidate))
             params["fts_query"] = f'"{folded.replace(chr(34), chr(34) * 2)}"'
+        else:
+            filters.append(File.filename_casefold.contains(folded, autoescape=True))
     if query.tag_ids:
         matched = (
             select(FileTag.file_id)

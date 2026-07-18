@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import tempfile
 from datetime import UTC, datetime
@@ -13,10 +14,21 @@ from dokura.metadata.migrations import upgrade_database
 from dokura.metadata.natural_sort import natural_sort_bytes, normalized_casefold
 
 
-def generate(path: Path, count: int) -> dict[str, object]:
+EMPTY_ZIP = b"PK\x05\x06" + b"\x00" * 18
+
+
+def generate(path: Path, count: int, content_dir: Path | None = None) -> dict[str, object]:
+    """Generate the fixed representative data set used by stages 3 and 9.
+
+    Stage 9 may request a matching filesystem tree. Its tiny valid ZIP files are
+    only scan fixtures; representative image throughput is measured separately
+    against real Content ZIPs.
+    """
     upgrade_database(path)
     engine = create_database_engine(path)
     now = datetime.now(UTC).replace(tzinfo=None).isoformat(" ")
+    if content_dir is not None:
+        content_dir.mkdir(parents=True, exist_ok=True)
     try:
         with engine.begin() as connection:
             connection.execute(text(
@@ -43,9 +55,20 @@ def generate(path: Path, count: int) -> dict[str, object]:
                     parent = f"目录{index % 100:03d}"
                     name = f"作品 {index:06d} Café.zip"
                     relative = f"{parent}/{name}"
+                    if content_dir is None:
+                        device, inode = 1, index + 1
+                    else:
+                        zip_path = content_dir / relative
+                        zip_path.parent.mkdir(exist_ok=True)
+                        if not zip_path.exists():
+                            zip_path.write_bytes(EMPTY_ZIP)
+                        info = zip_path.stat()
+                        device, inode = info.st_dev, info.st_ino
                     rows.append((
                         file_id, relative, parent, name, name, normalized_casefold(name), natural_sort_bytes(name),
-                        1, index + 1, 10_000 + index * 31, 1_700_000_000_000_000_000 + index,
+                        device, inode,
+                        (content_dir / relative).stat().st_size if content_dir is not None else 10_000 + index * 31,
+                        (content_dir / relative).stat().st_mtime_ns if content_dir is not None else 1_700_000_000_000_000_000 + index,
                         f"version-{index}", "ready", "complete", None, name[:-4], normalized_casefold(name[:-4]),
                         None, None, None, None, 1, 1.0, "{}", "[]", "[]", None, index % 6, now,
                         1, 0, None, None, now, now,
@@ -82,7 +105,14 @@ def generate(path: Path, count: int) -> dict[str, object]:
         missing = {key: value for key, value in required.items() if value not in rendered[key]}
         if missing:
             raise RuntimeError(f"查询计划未使用目标索引: {missing}; plans={rendered}")
-        return {"records": count, "database_bytes": path.stat().st_size, "query_plans": rendered}
+        manifest = hashlib.sha256(
+            f"dokura-representative-v1:{count}:100:30".encode()
+        ).hexdigest()
+        return {
+            "records": count, "database_bytes": path.stat().st_size,
+            "filesystem_fixtures": count if content_dir is not None else 0,
+            "dataset_manifest_sha256": manifest, "query_plans": rendered,
+        }
     finally:
         engine.dispose()
 
@@ -91,6 +121,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="生成阶段 3 代表性元数据并验证查询计划")
     parser.add_argument("--count", type=int, default=100_000)
     parser.add_argument("--database", type=Path)
+    parser.add_argument("--content-dir", type=Path)
     parser.add_argument("--report", type=Path)
     args = parser.parse_args()
     if args.count < 1:
@@ -100,7 +131,7 @@ def main() -> int:
     if path is None:
         temporary = tempfile.TemporaryDirectory(prefix="dokura-stage3-")
         path = Path(temporary.name) / "metadata.sqlite3"
-    result = generate(path, args.count)
+    result = generate(path, args.count, args.content_dir)
     output = json.dumps(result, ensure_ascii=False, indent=2)
     if args.report:
         args.report.write_text(output + "\n", encoding="utf-8")

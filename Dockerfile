@@ -35,7 +35,7 @@ ENV LD_LIBRARY_PATH=/usr/local/lib \
 WORKDIR /app/server
 COPY server/pyproject.toml server/uv.lock ./
 RUN --mount=type=cache,target=/root/.cache/uv \
-    UV_HTTP_TIMEOUT=120 uv sync --locked --no-dev \
+    UV_HTTP_TIMEOUT=120 uv sync --locked --no-dev --no-install-project \
     && .venv/bin/python -c "import sqlite3; assert sqlite3.sqlite_version_info >= (3, 51, 3), sqlite3.sqlite_version" \
     && .venv/bin/python -c "import sqlite3; c=sqlite3.connect(':memory:'); c.execute(\"CREATE VIRTUAL TABLE probe USING fts5(value, tokenize='trigram')\")"
 COPY server/alembic.ini ./alembic.ini

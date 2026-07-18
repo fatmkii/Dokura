@@ -10,9 +10,12 @@ export DOKURA_STAGE4_CONFIG="$tmp_root/config"
 export DOKURA_STAGE4_PORT=${DOKURA_STAGE4_PORT:-18004}
 compose=(docker compose -p dokura-stage-04 -f "$ROOT/scripts/acceptance/docker-compose.stage-04.yaml")
 mkdir -p "$DOKURA_STAGE4_CONTENT" "$DOKURA_STAGE4_METADATA" "$DOKURA_STAGE4_CONFIG"
+chmod -R a+rwX "$DOKURA_STAGE4_METADATA" "$DOKURA_STAGE4_CONFIG"
 
 cleanup() {
   "${compose[@]}" down --volumes --remove-orphans >/dev/null 2>&1 || true
+  docker run --rm --user 0:0 -v "$tmp_root:/wipe" dokura:stage-04 \
+    chmod -R a+rwX /wipe >/dev/null 2>&1 || true
   rm -rf "$tmp_root"
 }
 trap cleanup EXIT

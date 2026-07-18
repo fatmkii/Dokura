@@ -16,12 +16,15 @@ COMPOSE=(
 
 cleanup() {
     "${COMPOSE[@]}" down --remove-orphans >/dev/null 2>&1 || true
+    docker run --rm --user 0:0 -v "$RUNTIME:/wipe" dokura:stage-08 \
+        chmod -R a+rwX /wipe >/dev/null 2>&1 || true
     rm -rf "$RUNTIME"
 }
 trap cleanup EXIT
 
 mkdir -p "$DOKURA_ACCEPTANCE_CONTENT" "$DOKURA_ACCEPTANCE_METADATA" "$DOKURA_ACCEPTANCE_CONFIG"
 touch "$DOKURA_ACCEPTANCE_CONTENT/read-only-sample.zip"
+chmod -R a+rwX "$DOKURA_ACCEPTANCE_METADATA" "$DOKURA_ACCEPTANCE_CONFIG"
 
 "${COMPOSE[@]}" up -d --build
 

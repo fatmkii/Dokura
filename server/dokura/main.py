@@ -85,16 +85,18 @@ def create_app(
             engine, writer, runtime_settings.content_dir, runtime_settings.cover_dir,
             operation_locks,
         )
+        watcher_stop = asyncio.Event()
         workers = [
             asyncio.create_task(task_scheduler.run(), name="dokura-task-scheduler"),
             asyncio.create_task(scans.run(), name="dokura-scan-coordinator"),
-            asyncio.create_task(watch_content(runtime_settings.content_dir, scans), name="dokura-content-watcher"),
+            asyncio.create_task(watch_content(runtime_settings.content_dir, scans, watcher_stop), name="dokura-content-watcher"),
         ]
         try:
             yield
         finally:
             await scans.stop()
             await task_scheduler.stop()
+            watcher_stop.set()
             for worker in workers:
                 worker.cancel()
             await asyncio.gather(*workers, return_exceptions=True)
