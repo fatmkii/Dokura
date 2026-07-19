@@ -200,7 +200,7 @@ private fun Metadata(item: FileDetailDto) {
         MetadataRow("页数", "${item.pageCount}（不可用 ${item.unavailablePageCount}）")
         MetadataRow("处理状态", UiText.statusLabel(item.status))
         MetadataRow("未分类 tag", item.unclassifiedTags.joinToString("、").ifBlank { UiText.Unrecognized })
-        MetadataRow("错误原因", item.lastError ?: UiText.Unrecognized)
+        item.lastError?.takeIf { it.isNotBlank() }?.let { MetadataRow("错误原因", it) }
     }
 }
 

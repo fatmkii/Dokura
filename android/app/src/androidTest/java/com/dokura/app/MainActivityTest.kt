@@ -2,12 +2,14 @@ package com.dokura.app
 
 import android.content.pm.ActivityInfo
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextClearance
@@ -53,7 +55,7 @@ class MainActivityTest {
     }
 
     @Test fun catalogRecentAndSettingsNavigationIsAvailable() {
-        composeRule.onNodeWithText(UiText.SearchHint).assertIsDisplayed()
+        composeRule.onNodeWithContentDescription(UiText.SearchHint).assertIsDisplayed()
         composeRule.onNodeWithText(UiText.RecentNav).performClick()
         composeRule.onNodeWithText(UiText.Recent).assertIsDisplayed()
         composeRule.onNodeWithText(UiText.Settings).performClick()
@@ -73,12 +75,12 @@ class MainActivityTest {
     @Test fun gridChoicesRemainAvailableAfterRotation() {
         composeRule.onNodeWithText(UiText.Settings).performClick()
         composeRule.onNodeWithTag("choice:5 列").performScrollTo().performClick()
-        composeRule.onNodeWithText("• 5 列").assertIsDisplayed()
+        composeRule.onNodeWithTag("choice:5 列").assertIsSelected()
         composeRule.activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
         composeRule.waitUntil(5_000) {
-            composeRule.onAllNodesWithText("• 5 列").fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithTag("choice:5 列").fetchSemanticsNodes().isNotEmpty()
         }
-        composeRule.onNodeWithText("• 5 列").assertExists()
+        composeRule.onNodeWithTag("choice:5 列").assertIsSelected()
         composeRule.onNodeWithText("4 列").assertExists()
         composeRule.onNodeWithText("6 列").assertExists()
     }
@@ -105,10 +107,10 @@ class MainActivityTest {
         composeRule.onNodeWithTag("choice:10 GB").performScrollTo().performClick()
         composeRule.activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
         composeRule.waitUntil(5_000) {
-            composeRule.onAllNodesWithText("• ${UiText.RightToLeft}").fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithTag("choice:${UiText.RightToLeft}").fetchSemanticsNodes().isNotEmpty()
         }
-        composeRule.onNodeWithText("• ${UiText.RightToLeft}").assertExists()
-        composeRule.onNodeWithText("• 10 GB").assertExists()
+        composeRule.onNodeWithTag("choice:${UiText.RightToLeft}").assertIsSelected()
+        composeRule.onNodeWithTag("choice:10 GB").assertIsSelected()
     }
 
     @Test fun readerGestureLayerUsesDirectionAndBlocksZoomedDragButKeepsEdgeTap() {

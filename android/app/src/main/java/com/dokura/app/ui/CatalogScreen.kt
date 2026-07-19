@@ -27,6 +27,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -34,6 +36,10 @@ import androidx.compose.material3.RangeSlider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.DisposableEffect
@@ -47,6 +53,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -150,8 +160,44 @@ private fun CatalogHeader(
     onFilters: () -> Unit,
     onRefresh: () -> Unit,
 ) {
-    Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-        Text(UiText.Catalog, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold)
+    var searchVisible by remember { mutableStateOf(search.isNotEmpty()) }
+    Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                UiText.Catalog,
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+            IconButton(onClick = {
+                if (searchVisible) {
+                    searchVisible = false
+                    onSearch("")
+                } else {
+                    searchVisible = true
+                }
+            }) {
+                Icon(
+                    if (searchVisible) Icons.Default.Close else Icons.Default.Search,
+                    contentDescription = if (searchVisible) "关闭搜索" else UiText.SearchHint,
+                )
+            }
+            IconButton(onClick = onRefresh) {
+                Icon(Icons.Default.Refresh, contentDescription = "刷新")
+            }
+            IconButton(onClick = onFilters) {
+                Icon(FilterListIcon, contentDescription = UiText.Filters)
+            }
+        }
+        if (searchVisible) {
+            OutlinedTextField(
+                value = search,
+                onValueChange = onSearch,
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                label = { Text(UiText.SearchHint) },
+            )
+        }
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = { onBreadcrumb("") }) { Text("Content") }
             var accumulated = ""
@@ -162,19 +208,34 @@ private fun CatalogHeader(
                 TextButton(onClick = { onBreadcrumb(target) }) { Text(part, maxLines = 1) }
             }
         }
-        OutlinedTextField(
-            value = search,
-            onValueChange = onSearch,
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            label = { Text(UiText.SearchHint) },
-        )
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-            TextButton(onClick = onRefresh) { Text("刷新") }
-            TextButton(onClick = onFilters) { Text(UiText.Filters) }
-        }
     }
 }
+
+private val FilterListIcon = ImageVector.Builder(
+    name = "FilterList",
+    defaultWidth = 24.dp,
+    defaultHeight = 24.dp,
+    viewportWidth = 24f,
+    viewportHeight = 24f,
+).apply {
+    path(fill = SolidColor(Color.Black)) {
+        moveTo(3f, 6f)
+        verticalLineTo(8f)
+        horizontalLineTo(21f)
+        verticalLineTo(6f)
+        close()
+        moveTo(6f, 11f)
+        verticalLineTo(13f)
+        horizontalLineTo(18f)
+        verticalLineTo(11f)
+        close()
+        moveTo(10f, 16f)
+        verticalLineTo(18f)
+        horizontalLineTo(14f)
+        verticalLineTo(16f)
+        close()
+    }
+}.build()
 
 @Composable
 private fun CatalogList(
